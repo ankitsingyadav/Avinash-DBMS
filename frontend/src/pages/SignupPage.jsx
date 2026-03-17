@@ -117,7 +117,7 @@ export default function SignupPage() {
           <div>
             <label className="field-label">Full Name</label>
             <input name="fullName" value={form.fullName} onChange={handleChange}
-              placeholder="Avinash Kumar" className={`field-input ${errors.fullName ? "field-error" : ""}`}/>
+              placeholder="Full Name" className={`field-input ${errors.fullName ? "field-error" : ""}`}/>
             {errors.fullName && <p className="field-msg">{errors.fullName}</p>}
           </div>
 
