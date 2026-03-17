@@ -93,7 +93,7 @@ export const signup = asyncHandler(async (req, res) => {
   // Send welcome email (non-blocking)
   sendEmail({
     to: user.email,
-    subject: "Welcome to AuthApp! ",
+    subject: "Welcome to DataBase Management! ",
     html: welcomeTemplate({ name: user.fullName }),
   }).catch((err) => console.error("Welcome email failed:", err.message));
 

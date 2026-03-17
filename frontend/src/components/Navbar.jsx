@@ -10,7 +10,7 @@ export default function Navbar() {
   const [profileOpen, setProfileOpen] = useState(false);
 
   const isAdmin = user?.role === "admin";
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + "/");
 
   const handleLogout = async () => {
     setProfileOpen(false);
@@ -21,7 +21,10 @@ export default function Navbar() {
   const navLinks = [
     { label: "Home", to: "/" },
     { label: "About", to: "/about" },
-    ...(isAdmin ? [{ label: "Admin", to: "/admin" }] : []),
+    ...(isAdmin ? [
+      { label: "Organisation", to: "/organisation", badge: null },
+      { label: "Admin", to: "/admin", badge: "ADMIN" },
+    ] : []),
   ];
 
   return (
@@ -63,16 +66,22 @@ export default function Navbar() {
             <Link
               key={link.label}
               to={link.to}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-1.5 ${
                 isActive(link.to)
                   ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                   : "text-slate-400 hover:text-white hover:bg-slate-700/60"
               }`}
             >
+              {/* Organisation icon */}
+              {link.label === "Organisation" && (
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                </svg>
+              )}
               {link.label}
-              {link.label === "Admin" && (
-                <span className="ml-1.5 text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
-                  ADMIN
+              {link.badge && (
+                <span className="ml-0.5 text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+                  {link.badge}
                 </span>
               )}
             </Link>
@@ -135,7 +144,7 @@ export default function Navbar() {
                   {/* Links */}
                   <div className="py-1.5">
 
-                    {/* My Profile — sabko dikhega */}
+                    {/* My Profile */}
                     <Link
                       to="/profile"
                       onClick={() => setProfileOpen(false)}
@@ -146,6 +155,20 @@ export default function Navbar() {
                       </svg>
                       My Profile
                     </Link>
+
+                    {/* Organisation — sirf admin */}
+                    {isAdmin && (
+                      <Link
+                        to="/organisation"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                        </svg>
+                        Organisation
+                      </Link>
+                    )}
 
                     {/* Dashboard — sirf admin */}
                     {isAdmin && (
@@ -233,13 +256,23 @@ export default function Navbar() {
               key={link.label}
               to={link.to}
               onClick={() => setMenuOpen(false)}
-              className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive(link.to)
                   ? "bg-indigo-600/20 text-indigo-300"
                   : "text-slate-400 hover:text-white hover:bg-slate-800/60"
               }`}
             >
+              {link.label === "Organisation" && (
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                </svg>
+              )}
               {link.label}
+              {link.badge && (
+                <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+                  {link.badge}
+                </span>
+              )}
             </Link>
           ))}
         </div>
