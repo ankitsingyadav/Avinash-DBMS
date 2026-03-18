@@ -102,7 +102,6 @@ const ngoSchema = new mongoose.Schema(
 
 ngoSchema.index({ name: "text" });
 ngoSchema.index({ focus_area: 1 });
-ngoSchema.index({ registration_number: 1 }, { unique: true });
 
 const NGO = mongoose.model("NGO", ngoSchema);
 export default NGO;

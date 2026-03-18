@@ -28,7 +28,7 @@ export default function Navbar() {
   ];
 
   return (
-    <nav className="w-full border-b border-slate-800/60 bg-[#0c0c14]/90 backdrop-blur-md sticky top-0 z-50">
+<nav className="w-full border-b border-slate-800/60 bg-[#0c0c14]/90 backdrop-blur-md sticky top-0 z-50 relative">
       <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
 
         {/* ── Left: Logo ─────────────────────────────────────────── */}
@@ -250,7 +250,7 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {menuOpen && (
-        <div className="md:hidden border-t border-slate-800/60 bg-[#0c0c14] px-5 py-3 space-y-1">
+  <div className="md:hidden absolute top-full left-0 right-0 border-t border-slate-800/60 bg-[#0c0c14] px-5 py-3 space-y-1 z-50 shadow-xl shadow-black/40">
           {navLinks.map((link) => (
             <Link
               key={link.label}
