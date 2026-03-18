@@ -11,7 +11,7 @@ import DashboardPage from "./pages/DashboardPage";
 import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
 import AdminPage from "./pages/AdminPage";
-
+import ScrollToTop from "./components/Scrolltop";
 // ── Organisation imports ──────────────────────────────────────────
 import OrganisationPage   from "./pages/OrganisationPage";
 import SchoolFormPage     from "./pages/SchoolFormPage";
@@ -46,6 +46,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop/>
+
       <Toaster
         position="top-center"
         toastOptions={{
