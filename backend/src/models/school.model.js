@@ -1,5 +1,4 @@
 // models/school.model.js
-
 import mongoose from "mongoose";
 import validator from "validator";
 
@@ -12,13 +11,13 @@ const schoolSchema = new mongoose.Schema(
       minlength: [3, "Name must be at least 3 characters"],
       maxlength: [100, "Name cannot exceed 100 characters"],
     },
-    email: {
+    school_type: {
       type: String,
-      required: [true, "Email is required"],
-      unique: true,
-      lowercase: true,
-      trim: true,
-      validate: [validator.isEmail, "Please provide a valid email"],
+      required: [true, "School type is required"],
+      enum: {
+        values: ["Government", "Private"],
+        message: "School type must be Government or Private",
+      },
     },
     phone: {
       type: String,
@@ -30,11 +29,38 @@ const schoolSchema = new mongoose.Schema(
         message: "Please provide a valid phone number",
       },
     },
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      unique: true,
+      lowercase: true,
+      trim: true,
+      validate: [validator.isEmail, "Please provide a valid email"],
+    },
+    website: {
+      type: String,
+      trim: true,
+      default: "NA",
+      validate: {
+        validator: (v) => !v || v === "NA" || /^https?:\/\/.+/.test(v),
+        message: "Website must start with http:// or https://",
+      },
+    },
     address: {
       type: String,
       required: [true, "Address is required"],
       trim: true,
-      minlength: [10, "Please enter a complete address"],
+      minlength: [5, "Please enter a complete address"],
+    },
+    city: {
+      type: String,
+      required: [true, "City is required"],
+      trim: true,
+    },
+    state: {
+      type: String,
+      required: [true, "State is required"],
+      trim: true,
     },
     principal_name: {
       type: String,
@@ -42,33 +68,20 @@ const schoolSchema = new mongoose.Schema(
       trim: true,
       minlength: [3, "Name must be at least 3 characters"],
     },
-    established_year: {
-      type: Number,
-      required: [true, "Established year is required"],
-      min: [1800, "Year must be after 1800"],
-      max: [new Date().getFullYear(), "Year cannot be in the future"],
-    },
-    board_affiliation: {
-      type: String,
-      required: [true, "Board affiliation is required"],
-      enum: {
-        values: ["CBSE", "ICSE", "State Board", "IB", "Cambridge", "Other"],
-        message: "Invalid board affiliation",
-      },
-    },
-    total_students: {
-      type: Number,
-      min: [0, "Cannot be negative"],
-      default: null,
-    },
-    website: {
+    remarks: {
       type: String,
       trim: true,
+      maxlength: [500, "Remarks cannot exceed 500 characters"],
       default: null,
-      validate: {
-        validator: (v) => !v || /^https?:\/\/.+/.test(v),
-        message: "Website must start with http:// or https://",
-      },
+    },
+    status: {
+      type: String,
+      enum: { values: ["Active", "Inactive"], message: "Status must be Active or Inactive" },
+      default: "Active",
+    },
+    follow_up_date: {
+      type: Date,
+      default: null,
     },
     registered_by: {
       type: mongoose.Schema.Types.ObjectId,
@@ -76,14 +89,13 @@ const schoolSchema = new mongoose.Schema(
       default: null,
     },
   },
-  {
-    timestamps: true,
-    collection: "schools", // explicit collection name
-  }
+  { timestamps: true, collection: "schools" }
 );
 
-schoolSchema.index({ name: "text" });
-schoolSchema.index({ board_affiliation: 1 });
+schoolSchema.index({ name: "text", city: "text", principal_name: "text" });
+schoolSchema.index({ school_type: 1 });
+schoolSchema.index({ status: 1 });
+schoolSchema.index({ state: 1 });
 
 const School = mongoose.model("School", schoolSchema);
 export default School;
