@@ -35,7 +35,7 @@ const collegeSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      validate: [validator.isEmail, "Please provide a valid email"],
+      validate: [validator.isEmail, "Please provide a valid email address"],
     },
     website: {
       type: String,
@@ -76,7 +76,10 @@ const collegeSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: { values: ["Active", "Inactive"], message: "Status must be Active or Inactive" },
+      enum: {
+        values: ["Active", "Inactive"],
+        message: "Status must be Active or Inactive",
+      },
       default: "Active",
     },
     follow_up_date: {
@@ -92,10 +95,14 @@ const collegeSchema = new mongoose.Schema(
   { timestamps: true, collection: "colleges" }
 );
 
+// ── Indexes ────────────────────────────────────────────────────────────────────
 collegeSchema.index({ name: "text", city: "text", placement_officer: "text" });
 collegeSchema.index({ college_type: 1 });
 collegeSchema.index({ status: 1 });
 collegeSchema.index({ state: 1 });
+collegeSchema.index({ createdAt: -1 });
+collegeSchema.index({ state: 1, status: 1, createdAt: -1 });
+collegeSchema.index({ college_type: 1, status: 1, createdAt: -1 });
 
 const College = mongoose.model("College", collegeSchema);
 export default College;

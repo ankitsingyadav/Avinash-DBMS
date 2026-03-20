@@ -31,7 +31,7 @@ const volunteerSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      validate: [validator.isEmail, "Please provide a valid email"],
+      validate: [validator.isEmail, "Please provide a valid email address"],
     },
     website: {
       type: String,
@@ -73,7 +73,10 @@ const volunteerSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: { values: ["Active", "Not Active"], message: "Status must be Active or Not Active" },
+      enum: {
+        values: ["Active", "Not Active"],
+        message: "Status must be Active or Not Active",
+      },
       default: "Active",
     },
     follow_up_date: {
@@ -89,10 +92,14 @@ const volunteerSchema = new mongoose.Schema(
   { timestamps: true, collection: "volunteers" }
 );
 
+// ── Indexes ────────────────────────────────────────────────────────────────────
 volunteerSchema.index({ name: "text", city: "text" });
 volunteerSchema.index({ area_of_interest: 1 });
 volunteerSchema.index({ status: 1 });
 volunteerSchema.index({ state: 1 });
+volunteerSchema.index({ createdAt: -1 });
+volunteerSchema.index({ state: 1, status: 1, createdAt: -1 });
+volunteerSchema.index({ area_of_interest: 1, status: 1, createdAt: -1 });
 
 const Volunteer = mongoose.model("Volunteer", volunteerSchema);
 export default Volunteer;

@@ -35,7 +35,7 @@ const schoolSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      validate: [validator.isEmail, "Please provide a valid email"],
+      validate: [validator.isEmail, "Please provide a valid email address"],
     },
     website: {
       type: String,
@@ -76,7 +76,10 @@ const schoolSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: { values: ["Active", "Inactive"], message: "Status must be Active or Inactive" },
+      enum: {
+        values: ["Active", "Inactive"],
+        message: "Status must be Active or Inactive",
+      },
       default: "Active",
     },
     follow_up_date: {
@@ -92,10 +95,19 @@ const schoolSchema = new mongoose.Schema(
   { timestamps: true, collection: "schools" }
 );
 
+// ── Indexes ────────────────────────────────────────────────────────────────────
+// Full-text search across name, city, and principal name
 schoolSchema.index({ name: "text", city: "text", principal_name: "text" });
+
+// Individual field indexes for single-filter queries
 schoolSchema.index({ school_type: 1 });
 schoolSchema.index({ status: 1 });
 schoolSchema.index({ state: 1 });
+schoolSchema.index({ createdAt: -1 });
+
+// Composite index for combined filter + sort queries (most common pattern)
+schoolSchema.index({ state: 1, status: 1, createdAt: -1 });
+schoolSchema.index({ school_type: 1, status: 1, createdAt: -1 });
 
 const School = mongoose.model("School", schoolSchema);
 export default School;

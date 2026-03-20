@@ -1,4 +1,4 @@
-
+// models/ngo.model.js
 import mongoose from "mongoose";
 import validator from "validator";
 
@@ -35,7 +35,7 @@ const ngoSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      validate: [validator.isEmail, "Please provide a valid email"],
+      validate: [validator.isEmail, "Please provide a valid email address"],
     },
     website: {
       type: String,
@@ -76,7 +76,10 @@ const ngoSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: { values: ["Active", "Inactive"], message: "Status must be Active or Inactive" },
+      enum: {
+        values: ["Active", "Inactive"],
+        message: "Status must be Active or Inactive",
+      },
       default: "Active",
     },
     follow_up_date: {
@@ -92,10 +95,14 @@ const ngoSchema = new mongoose.Schema(
   { timestamps: true, collection: "ngos" }
 );
 
+// ── Indexes ────────────────────────────────────────────────────────────────────
 ngoSchema.index({ name: "text", city: "text", coordinator_name: "text" });
 ngoSchema.index({ ngo_type: 1 });
 ngoSchema.index({ status: 1 });
 ngoSchema.index({ state: 1 });
+ngoSchema.index({ createdAt: -1 });
+ngoSchema.index({ state: 1, status: 1, createdAt: -1 });
+ngoSchema.index({ ngo_type: 1, status: 1, createdAt: -1 });
 
 const NGO = mongoose.model("NGO", ngoSchema);
 export default NGO;
