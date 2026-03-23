@@ -31,6 +31,14 @@ import {
   deleteVolunteer,
 } from "../controllers/organisation.controller.js";
 
+import {
+  createOrganisation,
+  getAllOrganisations,
+  getOrganisationById,
+  updateOrganisation,
+  deleteOrganisation,
+} from "../controllers/unifiedOrganisation.controller.js";
+
 import { protect, restrictTo } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -38,9 +46,10 @@ const router = express.Router();
 // All organisation routes require authentication
 router.use(protect);
 
+// ── Specific Organisation Types ────────────────────────────────────────────────
+// These specific routes must come BEFORE the generic /:id route
+
 // ── Schools ────────────────────────────────────────────────────────────────────
-// NOTE: /bulk must be defined BEFORE /:id to prevent Express matching
-// the literal string "bulk" as a MongoDB ObjectId parameter.
 router.post(   "/schools/bulk", restrictTo("admin"), bulkCreateSchools);
 router.route(  "/schools")
   .get(                         getAllSchools)
@@ -79,5 +88,16 @@ router.route(  "/volunteers/:id")
   .get(                            getVolunteerById)
   .put(         restrictTo("admin"), updateVolunteer)
   .delete(      restrictTo("admin"), deleteVolunteer);
+
+// ── Unified Organisations (Generic) ───────────────────────────────────────────
+// Generic routes should be at the end
+router.route("/")
+  .get(getAllOrganisations)
+  .post(restrictTo("admin"), createOrganisation);
+
+router.route("/:id")
+  .get(getOrganisationById)
+  .put(restrictTo("admin"), updateOrganisation)
+  .delete(restrictTo("admin"), deleteOrganisation);
 
 export default router;
