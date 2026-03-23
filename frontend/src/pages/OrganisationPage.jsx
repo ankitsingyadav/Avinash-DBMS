@@ -69,6 +69,23 @@ const cards = [
       </svg>
     ),
   },
+  {
+    id: "unified-org",
+    label: "Add Organisation",
+    route: "/organisation/add",
+    img: "/download.png",
+    alt: "Unified Organisation Form",
+    description: "One common form for Schools, Colleges, NGOs, Corporates, and more.",
+    accent: "#8b5cf6",
+    gradient: "from-violet-600/20 to-purple-600/10",
+    border: "border-violet-500/30",
+    stat: "Unified Form",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+      </svg>
+    ),
+  },
 ];
 
 export default function OrganisationPage() {

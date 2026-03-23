@@ -441,17 +441,10 @@ export default function DashboardPage() {
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</p>
                 <div className="space-y-2">
                   <QuickAction
-                    accent="#6366f1"
-                    label="Add New School"
-                    sublabel="Register a school"
-                    onClick={() => navigate("/admin", { state: { tab: "school", action: "add" } })}
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>}
-                  />
-                  <QuickAction
-                    accent="#0ea5e9"
-                    label="Add New College"
-                    sublabel="Register a college"
-                    onClick={() => navigate("/admin", { state: { tab: "college", action: "add" } })}
+                    accent="#8b5cf6"
+                    label="Add Organisation"
+                    sublabel="Unified form for all types"
+                    onClick={() => navigate("/organisation/add")}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>}
                   />
                   <QuickAction

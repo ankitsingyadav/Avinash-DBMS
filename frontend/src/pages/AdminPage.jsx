@@ -1,6 +1,6 @@
 // ─── pages/AdminPage.jsx ─────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
 import toast from "react-hot-toast";
 
@@ -50,9 +50,14 @@ export default function AdminPage() {
 
   // Read navigation state from DashboardPage card clicks
   const location = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     if (location.state?.tab)        setActiveTab(location.state.tab);
     if (location.state?.showImport) setShowImport(true);
+    if (location.state?.action === "add") {
+      if (location.state.tab === "organisation") navigate("/organisation/add");
+      else setEditRecord({});
+    }
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const category = useMemo(() => CATS.find((c) => c.id === activeTab), [activeTab]);
@@ -134,7 +139,12 @@ export default function AdminPage() {
     const ids = [...selectedIds];
     let success = 0;
     for (const id of ids) {
-      try { await axios.delete(`${category.endpoint}/${id}`); success++; } catch {}
+      try { 
+        await axios.delete(`${category.endpoint}/${id}`); 
+        success++; 
+      } catch (err) {
+        console.error(`Failed to delete record ${id}:`, err);
+      }
     }
     toast.success(`${success} record${success !== 1 ? "s" : ""} deleted successfully.`);
     setSelectedIds(new Set()); setShowBulkDeleteConfirm(false); setBulkDeleteLoading(false);
@@ -167,13 +177,26 @@ export default function AdminPage() {
             </div>
             <h1 className="text-2xl font-bold text-white">Dashboard</h1>
           </div>
-          <button onClick={() => setShowImport(true)}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (activeTab === "organisation") navigate("/organisation/add");
+                else setEditRecord({});
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5 shadow-lg shadow-indigo-500/20"
+              style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+              Add New
+            </button>
+            <button onClick={() => setShowImport(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
             style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", boxShadow: "0 4px 20px rgba(99,102,241,0.22)" }}>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             Import Data
           </button>
         </div>
+      </div>
 
         {/* Tabs */}
         <div className="flex gap-1 mb-5 bg-[#13131f] border border-slate-800 rounded-2xl p-1.5 overflow-x-auto">
