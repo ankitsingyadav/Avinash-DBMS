@@ -1,3 +1,4 @@
+// OrganisationFormPage.jsx — Updated with LocationSelector (cascading dropdowns + pincode autofill)
 import React, { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,59 +8,74 @@ import axios from "../utils/axios";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { inputCls } from "../admin/components/ui";
+import LocationSelector from "../components/LocationSelector"; // ← NEW
 
 const organisationSchema = z.object({
   centreType: z.enum(["School", "College", "NGO", "Corporate", "Online", "Community Centre"], {
     errorMap: () => ({ message: "Please select a valid centre type" }),
   }),
-  centreName: z.string().min(3, "Name must be at least 3 characters").max(100, "Name cannot exceed 100 characters"),
-  website: z.string().optional().refine((val) => !val || /^https?:\/\/.+/.test(val), {
-    message: "Website must start with http:// or https://",
-  }),
+  centreName: z
+    .string()
+    .min(3, "Name must be at least 3 characters")
+    .max(100, "Name cannot exceed 100 characters"),
+  website: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^https?:\/\/.+/.test(val), {
+      message: "Website must start with http:// or https://",
+    }),
   address: z.string().min(5, "Address is required"),
-  city: z.string().min(1, "City is required"),
-  state: z.string().min(1, "State is required"),
-  pincode: z.string().regex(/^\d{6}$/, "Pincode must be a 6-digit number"),
-  contacts: z.array(z.object({
-    name: z.string().min(1, "Contact name is required"),
-    designation: z.string().min(1, "Designation is required"),
-    contactNumber: z.string().regex(/^(\+\d{1,3}[- ]?)?\d{10,15}$/, "Invalid contact number"),
-    email: z.string().email("Invalid email address"),
-  })).min(1, "At least one contact person is required"),
+  // ── Location fields now include district
+  state:    z.string().min(1, "State is required"),
+  district: z.string().min(1, "District is required"),
+  city:     z.string().min(1, "City is required"),
+  pincode:  z.string().regex(/^\d{6}$/, "Pincode must be a 6-digit number"),
+  contacts: z
+    .array(
+      z.object({
+        name:          z.string().min(1, "Contact name is required"),
+        designation:   z.string().min(1, "Designation is required"),
+        contactNumber: z.string().regex(/^(\+\d{1,3}[- ]?)?\d{10,15}$/, "Invalid contact number"),
+        email:         z.string().email("Invalid email address"),
+      })
+    )
+    .min(1, "At least one contact person is required"),
   onboardedBy: z.string().min(1, "Onboarded by is required"),
 });
-
-const STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Delhi", "Jammu and Kashmir", "Ladakh", "Puducherry", "Chandigarh", "Andaman and Nicobar Islands", "Dadra and Nagar Haveli and Daman and Diu", "Lakshadweep"
-];
 
 const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
 
 const OrganisationFormPage = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [loading,     setLoading]     = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [formData, setFormData] = useState(null);
+  const [formData,    setFormData]    = useState(null);
 
-  const { register, control, handleSubmit, formState: { errors } } = useForm({
+  const {
+    register,
+    control,
+    handleSubmit,
+    setValue,
+    getValues,
+    trigger,
+    formState: { errors },
+  } = useForm({
     resolver: zodResolver(organisationSchema),
     defaultValues: {
-      centreType: "",
-      centreName: "",
-      website: "",
-      address: "",
-      city: "",
-      state: "",
-      pincode: "",
-      contacts: [{ name: "", designation: "", contactNumber: "", email: "" }],
+      centreType:  "",
+      centreName:  "",
+      website:     "",
+      address:     "",
+      state:       "",
+      district:    "",
+      city:        "",
+      pincode:     "",
+      contacts:    [{ name: "", designation: "", contactNumber: "", email: "" }],
       onboardedBy: "",
-    }
+    },
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "contacts"
-  });
+  const { fields, append, remove } = useFieldArray({ control, name: "contacts" });
 
   const onSubmit = (data) => {
     setFormData(data);
@@ -95,14 +111,16 @@ const OrganisationFormPage = () => {
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs text-slate-500 mb-8">
           <Link to="/organisation" className="hover:text-slate-300 transition-colors">Organisation</Link>
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
           <span className="text-indigo-400 font-medium">Add Organisation</span>
         </div>
 
         <div className="flex items-start gap-4 mb-8">
           <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#6366f1" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z"/>
             </svg>
           </div>
           <div>
@@ -131,42 +149,48 @@ const OrganisationFormPage = () => {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-400 ml-1">Centre Name *</label>
-                <input {...register("centreName")} placeholder="e.g. St. Xavier's School" className={inputCls(!!errors.centreName)} />
+                <input
+                  {...register("centreName")}
+                  placeholder="e.g. St. Xavier's School"
+                  className={inputCls(!!errors.centreName)}
+                />
                 {errors.centreName && <p className="text-[10px] text-red-400 ml-1">{errors.centreName.message}</p>}
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-400 ml-1">Website (Optional)</label>
-                <input {...register("website")} placeholder="https://example.com" className={inputCls(!!errors.website)} />
+                <input
+                  {...register("website")}
+                  placeholder="https://example.com"
+                  className={inputCls(!!errors.website)}
+                />
                 {errors.website && <p className="text-[10px] text-red-400 ml-1">{errors.website.message}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 ml-1">Pincode *</label>
-                <input {...register("pincode")} placeholder="6-digit pincode" className={inputCls(!!errors.pincode)} />
-                {errors.pincode && <p className="text-[10px] text-red-400 ml-1">{errors.pincode.message}</p>}
               </div>
 
               <div className="space-y-1.5 md:col-span-2">
                 <label className="text-xs font-medium text-slate-400 ml-1">Full Address *</label>
-                <textarea {...register("address")} rows={2} placeholder="Building, Street, Area..." className={inputCls(!!errors.address) + " resize-none"} />
+                <textarea
+                  {...register("address")}
+                  rows={2}
+                  placeholder="Building, Street, Area..."
+                  className={inputCls(!!errors.address) + " resize-none"}
+                />
                 {errors.address && <p className="text-[10px] text-red-400 ml-1">{errors.address.message}</p>}
               </div>
+            </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 ml-1">State *</label>
-                <select {...register("state")} className={inputCls(!!errors.state)}>
-                  <option value="">Select State</option>
-                  {STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                {errors.state && <p className="text-[10px] text-red-400 ml-1">{errors.state.message}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 ml-1">City *</label>
-                <input {...register("city")} placeholder="Enter city" className={inputCls(!!errors.city)} />
-                {errors.city && <p className="text-[10px] text-red-400 ml-1">{errors.city.message}</p>}
-              </div>
+            {/* ── LocationSelector replaces state / city / pincode fields ── */}
+            <div className="mt-6 pt-6 border-t border-slate-800/60">
+              <LocationSelector
+                mode="rhf"
+                showPincode={true}
+                control={control}
+                register={register}
+                errors={errors}
+                setValue={setValue}
+                getValues={getValues}
+                trigger={trigger}
+              />
             </div>
           </div>
 
@@ -179,16 +203,23 @@ const OrganisationFormPage = () => {
 
             <div className="space-y-6">
               {fields.map((field, index) => (
-                <div key={field.id} className="relative p-5 bg-slate-800/30 border border-slate-700/40 rounded-xl space-y-4">
+                <div
+                  key={field.id}
+                  className="relative p-5 bg-slate-800/30 border border-slate-700/40 rounded-xl space-y-4"
+                >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Contact Person #{index + 1}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                      Contact Person #{index + 1}
+                    </span>
                     {fields.length > 1 && (
                       <button
                         type="button"
                         onClick={() => remove(index)}
                         className="text-red-400 hover:text-red-300 text-xs flex items-center gap-1 transition-colors"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15"/>
+                        </svg>
                         Remove
                       </button>
                     )}
@@ -197,23 +228,47 @@ const OrganisationFormPage = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-400 ml-1">Full Name *</label>
-                      <input {...register(`contacts.${index}.name`)} placeholder="Enter name" className={inputCls(!!errors.contacts?.[index]?.name)} />
-                      {errors.contacts?.[index]?.name && <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].name.message}</p>}
+                      <input
+                        {...register(`contacts.${index}.name`)}
+                        placeholder="Enter name"
+                        className={inputCls(!!errors.contacts?.[index]?.name)}
+                      />
+                      {errors.contacts?.[index]?.name && (
+                        <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].name.message}</p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-400 ml-1">Designation *</label>
-                      <input {...register(`contacts.${index}.designation`)} placeholder="e.g. Principal, Director" className={inputCls(!!errors.contacts?.[index]?.designation)} />
-                      {errors.contacts?.[index]?.designation && <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].designation.message}</p>}
+                      <input
+                        {...register(`contacts.${index}.designation`)}
+                        placeholder="e.g. Principal, Director"
+                        className={inputCls(!!errors.contacts?.[index]?.designation)}
+                      />
+                      {errors.contacts?.[index]?.designation && (
+                        <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].designation.message}</p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-400 ml-1">Contact Number *</label>
-                      <input {...register(`contacts.${index}.contactNumber`)} placeholder="10-digit number" className={inputCls(!!errors.contacts?.[index]?.contactNumber)} />
-                      {errors.contacts?.[index]?.contactNumber && <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].contactNumber.message}</p>}
+                      <input
+                        {...register(`contacts.${index}.contactNumber`)}
+                        placeholder="10-digit number"
+                        className={inputCls(!!errors.contacts?.[index]?.contactNumber)}
+                      />
+                      {errors.contacts?.[index]?.contactNumber && (
+                        <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].contactNumber.message}</p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-400 ml-1">Email Address *</label>
-                      <input {...register(`contacts.${index}.email`)} placeholder="email@example.com" className={inputCls(!!errors.contacts?.[index]?.email)} />
-                      {errors.contacts?.[index]?.email && <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].email.message}</p>}
+                      <input
+                        {...register(`contacts.${index}.email`)}
+                        placeholder="email@example.com"
+                        className={inputCls(!!errors.contacts?.[index]?.email)}
+                      />
+                      {errors.contacts?.[index]?.email && (
+                        <p className="text-[10px] text-red-400 ml-1">{errors.contacts[index].email.message}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -224,8 +279,10 @@ const OrganisationFormPage = () => {
                 onClick={() => append({ name: "", designation: "", contactNumber: "", email: "" })}
                 className="w-full py-3 border-2 border-dashed border-slate-700/50 rounded-xl text-slate-500 hover:text-indigo-400 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all text-sm font-medium flex items-center justify-center gap-2"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-                Do you want to add another contact person for this centre?
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                Add another contact person
               </button>
             </div>
           </div>
@@ -240,16 +297,28 @@ const OrganisationFormPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-400 ml-1">Centre Onboarded By *</label>
-                <input {...register("onboardedBy")} placeholder="Enter name" className={inputCls(!!errors.onboardedBy)} />
-                {errors.onboardedBy && <p className="text-[10px] text-red-400 ml-1">{errors.onboardedBy.message}</p>}
+                <input
+                  {...register("onboardedBy")}
+                  placeholder="Enter name"
+                  className={inputCls(!!errors.onboardedBy)}
+                />
+                {errors.onboardedBy && (
+                  <p className="text-[10px] text-red-400 ml-1">{errors.onboardedBy.message}</p>
+                )}
               </div>
             </div>
           </div>
 
           {/* Footer Actions */}
           <div className="flex items-center justify-between pt-4 border-t border-slate-800/60">
-            <Link to="/organisation" className="text-sm text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>Back
+            <Link
+              to="/organisation"
+              className="text-sm text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
+              </svg>
+              Back
             </Link>
             <div className="flex gap-3">
               <button

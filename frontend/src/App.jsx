@@ -12,15 +12,9 @@ import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
 import AdminPage from "./pages/AdminPage";
 import ScrollToTop from "./components/Scrolltop";
-// ── Organisation imports ──────────────────────────────────────────
-import OrganisationPage   from "./pages/OrganisationPage";
-import SchoolFormPage     from "./pages/SchoolFormPage";
-import CollegeFormPage    from "./pages/CollegeFormPage";
-import NGOFormPage        from "./pages/NGOFormPage";
-import VolunteerFormPage  from "./pages/VolunteerFormPage";
+import OrganisationPage from "./pages/OrganisationPage";
+import VolunteerFormPage from "./pages/VolunteerFormPage";
 import OrganisationFormPage from "./pages/OrganisationFormPage";
-
-// Admin-only route wrapper — reusable helper
 const AdminOnly = ({ children }) => {
   const { user } = useAuthStore();
   return (
@@ -41,7 +35,7 @@ export default function App() {
     return (
       <div className="auth-bg min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
+          <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-slate-400 text-sm">Loading...</p>
         </div>
       </div>
@@ -50,8 +44,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <ScrollToTop/>
-
+      <ScrollToTop />
       <Toaster
         position="top-center"
         toastOptions={{
@@ -63,16 +56,12 @@ export default function App() {
             fontSize: "14px",
           },
           success: { iconTheme: { primary: "#6366f1", secondary: "#fff" } },
-          error:   { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
+          error: { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
         }}
       />
       <Routes>
-
-        {/* ── Public ─────────────────────────────────────────────── */}
-        <Route path="/"      element={<HomePage />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/about" element={<AboutPage />} />
-
-        {/* ── Auth ───────────────────────────────────────────────── */}
         <Route
           path="/login"
           element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />}
@@ -83,28 +72,55 @@ export default function App() {
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-
-        {/* ── Authenticated user ─────────────────────────────────── */}
         <Route
           path="/profile"
-          element={<ProtectedRoute><DashboardPage /></ProtectedRoute>}
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
         />
-
-        {/* ── Admin only ─────────────────────────────────────────── */}
-        <Route path="/dashboard" element={<AdminOnly><DashboardPage /></AdminOnly>} />
-        <Route path="/admin"     element={<AdminOnly><AdminPage /></AdminOnly>} />
-
-        {/* ── Organisation (admin only) ──────────────────────────── */}
-        <Route path="/organisation"           element={<AdminOnly><OrganisationPage /></AdminOnly>} />
-        <Route path="/organisation/add"       element={<AdminOnly><OrganisationFormPage /></AdminOnly>} />
-        <Route path="/organisation/school"    element={<AdminOnly><SchoolFormPage /></AdminOnly>} />
-        <Route path="/organisation/college"  element={<AdminOnly><CollegeFormPage /></AdminOnly>} />
-        <Route path="/organisation/ngo"      element={<AdminOnly><NGOFormPage /></AdminOnly>} />
-        <Route path="/organisation/volunteer" element={<AdminOnly><VolunteerFormPage /></AdminOnly>} />
-
-        {/* ── Fallback ───────────────────────────────────────────── */}
+        <Route
+          path="/dashboard"
+          element={
+            <AdminOnly>
+              <DashboardPage />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <AdminOnly>
+              <AdminPage />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/organisation"
+          element={
+            <AdminOnly>
+              <OrganisationPage />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/organisation/add"
+          element={
+            <AdminOnly>
+              <OrganisationFormPage />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/organisation/volunteer"
+          element={
+            <AdminOnly>
+              <VolunteerFormPage />
+            </AdminOnly>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
-
       </Routes>
     </BrowserRouter>
   );

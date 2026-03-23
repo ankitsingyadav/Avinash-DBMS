@@ -1,4 +1,4 @@
-// models/volunteer.model.js
+// models/volunteer.model.js — Updated with district field
 import mongoose from "mongoose";
 import validator from "validator";
 
@@ -52,6 +52,12 @@ const volunteerSchema = new mongoose.Schema(
       required: [true, "City is required"],
       trim: true,
     },
+    // ── NEW: district field ──────────────────────────────────────────────────
+    district: {
+      type: String,
+      required: [true, "District is required"],
+      trim: true,
+    },
     state: {
       type: String,
       required: [true, "State is required"],
@@ -93,12 +99,14 @@ const volunteerSchema = new mongoose.Schema(
 );
 
 // ── Indexes ────────────────────────────────────────────────────────────────────
-volunteerSchema.index({ name: "text", city: "text" });
+volunteerSchema.index({ name: "text", city: "text", district: "text" });
 volunteerSchema.index({ area_of_interest: 1 });
 volunteerSchema.index({ status: 1 });
 volunteerSchema.index({ state: 1 });
+volunteerSchema.index({ district: 1 });                         // NEW
 volunteerSchema.index({ createdAt: -1 });
 volunteerSchema.index({ state: 1, status: 1, createdAt: -1 });
+volunteerSchema.index({ district: 1, status: 1, createdAt: -1 }); // NEW
 volunteerSchema.index({ area_of_interest: 1, status: 1, createdAt: -1 });
 
 const Volunteer = mongoose.model("Volunteer", volunteerSchema);

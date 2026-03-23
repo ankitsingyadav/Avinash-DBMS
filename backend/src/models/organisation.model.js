@@ -1,3 +1,4 @@
+// models/organisation.model.js — Updated with district field
 import mongoose from "mongoose";
 import validator from "validator";
 
@@ -65,6 +66,12 @@ const organisationSchema = new mongoose.Schema(
       required: [true, "City is required"],
       trim: true,
     },
+    // ── NEW: district field ──────────────────────────────────────────────────
+    district: {
+      type: String,
+      required: [true, "District is required"],
+      trim: true,
+    },
     state: {
       type: String,
       required: [true, "State is required"],
@@ -105,9 +112,13 @@ const organisationSchema = new mongoose.Schema(
   { timestamps: true, collection: "organisations" }
 );
 
-// Indexes for search and filtering
-organisationSchema.index({ centreName: "text", city: "text", centreType: 1 });
+// ── Indexes ────────────────────────────────────────────────────────────────────
+organisationSchema.index({ centreName: "text", city: "text", district: "text" });
+organisationSchema.index({ centreType: 1 });
+organisationSchema.index({ state: 1 });
+organisationSchema.index({ district: 1 });                            // NEW
+organisationSchema.index({ pincode: 1 });
+organisationSchema.index({ state: 1, district: 1, centreType: 1 }); // NEW compound
 
 const Organisation = mongoose.model("Organisation", organisationSchema);
-
 export default Organisation;

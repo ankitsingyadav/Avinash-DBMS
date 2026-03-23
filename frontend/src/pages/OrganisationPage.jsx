@@ -2,57 +2,6 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 const cards = [
   {
-    id: "school",
-    label: "Schools",
-    route: "/organisation/school",
-    img: "/school.png",
-    alt: "School building",
-    description: "Register schools, principals, and institutional contact details.",
-    accent: "#6366f1",
-    gradient: "from-indigo-600/20 to-violet-600/10",
-    border: "border-indigo-500/30",
-    stat: "Academic Institutions",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0v6m-4-4v4m8-4v4M3 21h18"/>
-      </svg>
-    ),
-  },
-  {
-    id: "college",
-    label: "Colleges",
-    route: "/organisation/college",
-    img: "/college.png",
-    alt: "College campus",
-    description: "Register colleges, universities, and their directors or heads.",
-    accent: "#0ea5e9",
-    gradient: "from-sky-600/20 to-cyan-600/10",
-    border: "border-sky-500/30",
-    stat: "Higher Education",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4"/>
-      </svg>
-    ),
-  },
-  {
-    id: "ngo",
-    label: "NGOs",
-    route: "/organisation/ngo",
-    img: "/ngo.png",
-    alt: "NGO organization",
-    description: "Register non-governmental organizations and their core focus areas.",
-    accent: "#10b981",
-    gradient: "from-emerald-600/20 to-teal-600/10",
-    border: "border-emerald-500/30",
-    stat: "Non-Profit Orgs",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-      </svg>
-    ),
-  },
-  {
     id: "volunteer",
     label: "Volunteers",
     route: "/organisation/volunteer",
@@ -111,7 +60,7 @@ export default function OrganisationPage() {
 
       {/* Cards */}
       <div className="max-w-6xl mx-auto px-5 pb-16">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl">
           {cards.map((card) => (
             <button
               key={card.id}
@@ -201,7 +150,7 @@ export default function OrganisationPage() {
         </div>
 
         {/* Info strip */}
-        <div className="mt-8 bg-[#13131f] border border-slate-700/40 rounded-xl p-4 flex items-center gap-3">
+        <div className="mt-8 max-w-2xl bg-[#13131f] border border-slate-700/40 rounded-xl p-4 flex items-center gap-3">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#6366f1" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
           </svg>
