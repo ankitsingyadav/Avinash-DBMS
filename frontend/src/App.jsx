@@ -18,9 +18,20 @@ import SchoolFormPage     from "./pages/SchoolFormPage";
 import CollegeFormPage    from "./pages/CollegeFormPage";
 import NGOFormPage        from "./pages/NGOFormPage";
 import VolunteerFormPage  from "./pages/VolunteerFormPage";
+import OrganisationFormPage from "./pages/OrganisationFormPage";
+
+// Admin-only route wrapper — reusable helper
+const AdminOnly = ({ children }) => {
+  const { user } = useAuthStore();
+  return (
+    <ProtectedRoute>
+      {user?.role === "admin" ? children : <Navigate to="/" replace />}
+    </ProtectedRoute>
+  );
+};
 
 export default function App() {
-  const { checkAuth, isAuthenticated, isCheckingAuth, user } = useAuthStore();
+  const { checkAuth, isAuthenticated, isCheckingAuth } = useAuthStore();
 
   useEffect(() => {
     checkAuth();
@@ -36,13 +47,6 @@ export default function App() {
       </div>
     );
   }
-
-  // Admin-only route wrapper — reusable helper
-  const AdminOnly = ({ children }) => (
-    <ProtectedRoute>
-      {user?.role === "admin" ? children : <Navigate to="/" replace />}
-    </ProtectedRoute>
-  );
 
   return (
     <BrowserRouter>
@@ -91,8 +95,9 @@ export default function App() {
         <Route path="/admin"     element={<AdminOnly><AdminPage /></AdminOnly>} />
 
         {/* ── Organisation (admin only) ──────────────────────────── */}
-        <Route path="/organisation"          element={<AdminOnly><OrganisationPage /></AdminOnly>} />
-        <Route path="/organisation/school"   element={<AdminOnly><SchoolFormPage /></AdminOnly>} />
+        <Route path="/organisation"           element={<AdminOnly><OrganisationPage /></AdminOnly>} />
+        <Route path="/organisation/add"       element={<AdminOnly><OrganisationFormPage /></AdminOnly>} />
+        <Route path="/organisation/school"    element={<AdminOnly><SchoolFormPage /></AdminOnly>} />
         <Route path="/organisation/college"  element={<AdminOnly><CollegeFormPage /></AdminOnly>} />
         <Route path="/organisation/ngo"      element={<AdminOnly><NGOFormPage /></AdminOnly>} />
         <Route path="/organisation/volunteer" element={<AdminOnly><VolunteerFormPage /></AdminOnly>} />
