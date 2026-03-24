@@ -355,7 +355,7 @@ export default function VolunteerFormPage() {
               className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white hover:-translate-y-0.5 transition-all"
               style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", boxShadow: "0 4px 20px rgba(245,158,11,0.3)" }}
             >
-              Add Registration
+              Add Volunteer
             </button>
           </div>
         </div>

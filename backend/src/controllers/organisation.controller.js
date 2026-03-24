@@ -1,16 +1,12 @@
-// controllers/organisation.controller.js
+// controllers/organisation.controller.js  (volunteers)
 import Volunteer from "../models/volunteer.model.js";
 import { asyncHandler, sendSuccess, sendError } from "../utils/response.utils.js";
-
-// ── Constants ──────────────────────────────────────────────────────────────────
 
 const BULK_LIMIT = 500;
 
 const SORT_WHITELIST = new Set([
-  "name", "email", "city", "state", "status", "follow_up_date", "createdAt", "updatedAt",
+  "name", "email", "city", "district", "state", "status", "follow_up_date", "createdAt", "updatedAt",
 ]);
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 const buildSort = (sortField = "createdAt", sortDir = "desc") => {
   const field = SORT_WHITELIST.has(sortField) ? sortField : "createdAt";
@@ -26,7 +22,7 @@ const buildDateFilter = (dateFrom, dateTo) => {
 };
 
 const handleDuplicateKey = (err) => {
-  const field = Object.keys(err.keyPattern || {})[0];
+  const field  = Object.keys(err.keyPattern || {})[0];
   const labels = { email: "Email address", phone: "Phone number" };
   return `${labels[field] || field} is already registered.`;
 };
@@ -45,36 +41,35 @@ const bulkInsert = async (Model, records) => {
   }
 };
 
-// ── VOLUNTEERS ─────────────────────────────────────────────────────────────────
-
 /**
  * POST /organisations/volunteers
  */
 export const createVolunteer = asyncHandler(async (req, res) => {
   const {
     name, phone, email, website,
-    address, city, state, area_of_interest,
+    address, city, district, state, area_of_interest,
     remarks, status, follow_up_date,
   } = req.body;
 
-  if (!name || !phone || !email || !city || !state || !area_of_interest)
-    return sendError(res, 422, "Missing required fields: name, phone, email, city, state, area_of_interest.");
+  if (!name || !phone || !email || !city || !district || !state || !area_of_interest)
+    return sendError(res, 422, "Missing required fields: name, phone, email, city, district, state, area_of_interest.");
 
   try {
     const volunteer = await Volunteer.create({
-      name: name.trim(),
-      volunteer_type: "Individual Volunteer",
-      phone: phone.trim(),
-      email: email.toLowerCase().trim(),
-      website: website?.trim() || "NA",
-      address: address?.trim() || null,
-      city: city.trim(),
-      state: state.trim(),
+      name:             name.trim(),
+      volunteer_type:   "Individual Volunteer",
+      phone:            phone.trim(),
+      email:            email.toLowerCase().trim(),
+      website:          website?.trim() || "NA",
+      address:          address?.trim() || null,
+      city:             city.trim(),
+      district:         district.trim(),
+      state:            state.trim(),
       area_of_interest,
-      remarks: remarks?.trim() || null,
-      status: status || "Active",
-      follow_up_date: follow_up_date || null,
-      registered_by: req.user._id,
+      remarks:          remarks?.trim() || null,
+      status:           status || "Active",
+      follow_up_date:   follow_up_date || null,
+      registered_by:    req.user._id,
     });
     return sendSuccess(res, 201, "Volunteer registered successfully.", { volunteer });
   } catch (err) {
@@ -103,6 +98,7 @@ export const bulkCreateVolunteers = asyncHandler(async (req, res) => {
     website:          r.website?.trim() || "NA",
     address:          r.address?.trim() || null,
     city:             r.city?.trim(),
+    district:         r.district?.trim() || "",
     state:            r.state?.trim(),
     area_of_interest: r.area_of_interest,
     remarks:          r.remarks?.trim() || null,
@@ -123,13 +119,33 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
     page = 1, limit = 12,
     search, sortField, sortDir,
     dateFrom, dateTo,
-    status, state, area_of_interest,
+    status, state, district, area_of_interest,
   } = req.query;
 
+  // ── Base query (date filter) ──────────────────────────────────────────────
   const query = { ...buildDateFilter(dateFrom, dateTo) };
-  if (search)           query.$text            = { $search: search };
+
+  // ── Multi-field regex search ──────────────────────────────────────────────
+  // Koi bhi field mein match kare to result aayega
+  if (search && search.trim()) {
+    const regex = { $regex: search.trim(), $options: "i" };
+    query.$or = [
+      { name:             regex },
+      { email:            regex },
+      { phone:            regex },
+      { city:             regex },
+      { district:         regex },
+      { state:            regex },
+      { area_of_interest: regex },
+      { remarks:          regex },
+      { address:          regex },
+    ];
+  }
+
+  // ── Exact filters (dropdown se aate hain) ────────────────────────────────
   if (status)           query.status           = status;
   if (state)            query.state            = state;
+  if (district)         query.district         = district;
   if (area_of_interest) query.area_of_interest = area_of_interest;
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -166,7 +182,7 @@ export const getVolunteerById = asyncHandler(async (req, res) => {
 export const updateVolunteer = asyncHandler(async (req, res) => {
   const allowed = [
     "name", "phone", "email", "website", "address",
-    "city", "state", "area_of_interest",
+    "city", "district", "state", "area_of_interest",
     "remarks", "status", "follow_up_date",
   ];
   const updates = {};
@@ -185,7 +201,9 @@ export const updateVolunteer = asyncHandler(async (req, res) => {
   }
 });
 
-
+/**
+ * DELETE /organisations/volunteers/:id
+ */
 export const deleteVolunteer = asyncHandler(async (req, res) => {
   const volunteer = await Volunteer.findByIdAndDelete(req.params.id);
   if (!volunteer) return sendError(res, 404, "Volunteer not found.");

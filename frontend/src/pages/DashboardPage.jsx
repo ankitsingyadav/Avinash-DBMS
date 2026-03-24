@@ -5,86 +5,6 @@ import Navbar from "../components/Navbar";
 import useAuthStore from "../context/authStore";
 import axios from "../utils/axios.js";
 
-// ─── Stat card accent config ──────────────────────────────────────────────────
-const STAT_CONFIG = {
-  school: {
-    label:    "Schools",
-    tab:      "school",
-    accent:   "#6366f1",
-    bg:       "rgba(99,102,241,0.08)",
-    border:   "rgba(99,102,241,0.18)",
-    endpoint: "/organisations/schools",
-    dataKey:  "schools",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0v6m-4-4v4m8-4v4M3 21h18"/>
-      </svg>
-    ),
-    breakdowns: [
-      { key: "school_type", value: "Government", label: "Government", color: "#10b981" },
-      { key: "school_type", value: "Private",    label: "Private",    color: "#f59e0b" },
-    ],
-  },
-  college: {
-    label:    "Colleges",
-    tab:      "college",
-    accent:   "#0ea5e9",
-    bg:       "rgba(14,165,233,0.08)",
-    border:   "rgba(14,165,233,0.18)",
-    endpoint: "/organisations/colleges",
-    dataKey:  "colleges",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4"/>
-      </svg>
-    ),
-    breakdowns: [
-      { key: "college_type", value: "University", label: "University", color: "#6366f1" },
-      { key: "college_type", value: "Private",    label: "Private",    color: "#f59e0b" },
-      { key: "college_type", value: "Government", label: "Government", color: "#10b981" },
-    ],
-  },
-  ngo: {
-    label:    "NGOs",
-    tab:      "ngo",
-    accent:   "#10b981",
-    bg:       "rgba(16,185,129,0.08)",
-    border:   "rgba(16,185,129,0.18)",
-    endpoint: "/organisations/ngos",
-    dataKey:  "ngos",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-      </svg>
-    ),
-    breakdowns: [
-      { key: "ngo_type", value: "Trust",      label: "Trust",      color: "#6366f1" },
-      { key: "ngo_type", value: "Society",    label: "Society",    color: "#0ea5e9" },
-      { key: "ngo_type", value: "Foundation", label: "Foundation", color: "#f59e0b" },
-    ],
-  },
-  volunteer: {
-    label:    "Volunteers",
-    tab:      "volunteer",
-    accent:   "#f59e0b",
-    bg:       "rgba(245,158,11,0.08)",
-    border:   "rgba(245,158,11,0.18)",
-    endpoint: "/organisations/volunteers",
-    dataKey:  "volunteers",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-      </svg>
-    ),
-    breakdowns: [
-      { key: "area_of_interest", value: "Teaching",    label: "Teaching",    color: "#6366f1" },
-      { key: "area_of_interest", value: "Tech",        label: "Tech",        color: "#0ea5e9" },
-      { key: "area_of_interest", value: "Social Work", label: "Social Work", color: "#10b981" },
-      { key: "area_of_interest", value: "Healthcare",  label: "Healthcare",  color: "#f59e0b" },
-    ],
-  },
-};
-
 // ─── Mini animated counter ────────────────────────────────────────────────────
 function Counter({ value, duration = 1200 }) {
   const [display, setDisplay] = useState(0);
@@ -106,78 +26,323 @@ function Counter({ value, duration = 1200 }) {
 function ProgressBar({ value, total, color }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1 rounded-full bg-slate-800/80 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: color }}
-        />
-      </div>
+    <div className="flex-1 h-1 rounded-full bg-slate-800/80 overflow-hidden">
+      <div
+        className="h-full rounded-full transition-all duration-700"
+        style={{ width: `${pct}%`, background: color }}
+      />
     </div>
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
-function StatCard({ config, onNavigate }) {
-  const [stats, setStats]   = useState(null);
+// ─── MERGED ORG CARD (School + College + NGO) ─────────────────────────────────
+// ─── MERGED ORG CARD (School + College + NGO) ─────────────────────────────────
+// FIXED: Correct API endpoints use /organisations?centreType=X
+//        Breakdowns removed (no sub-type field in DB)
+// ─── MERGED ORG CARD (All 6 centreTypes in 3+3 grid) ────────────────────────
+function MergedOrgCard({ onNavigate }) {
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        // Fetch total + each breakdown in parallel
-        const requests = [
-          axios.get(`${config.endpoint}?limit=1`),
-          ...config.breakdowns.map((b) =>
-            axios.get(`${config.endpoint}?limit=1&${b.key}=${encodeURIComponent(b.value)}`)
-          ),
-          // Active count
-          axios.get(`${config.endpoint}?limit=1&status=Active`),
-        ];
-        const results = await Promise.all(requests);
-        const getTotal = (res) => res.data?.data?.total ?? res.data?.total ?? 0;
+  const SECTIONS = [
+    {
+      key:        "school",
+      label:      "Schools",
+      centreType: "School",
+      accent:     "#6366f1",
+      bg:         "rgba(99,102,241,0.10)",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0v6m-4-4v4m8-4v4M3 21h18"/>
+        </svg>
+      ),
+    },
+    {
+      key:        "college",
+      label:      "Colleges",
+      centreType: "College",
+      accent:     "#0ea5e9",
+      bg:         "rgba(14,165,233,0.10)",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4"/>
+        </svg>
+      ),
+    },
+    {
+      key:        "ngo",
+      label:      "NGOs",
+      centreType: "NGO",
+      accent:     "#10b981",
+      bg:         "rgba(16,185,129,0.10)",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+        </svg>
+      ),
+    },
+    {
+      key:        "corporate",
+      label:      "Corporate",
+      centreType: "Corporate",
+      accent:     "#f59e0b",
+      bg:         "rgba(245,158,11,0.10)",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+        </svg>
+      ),
+    },
+    {
+      key:        "online",
+      label:      "Online",
+      centreType: "Online",
+      accent:     "#ec4899",
+      bg:         "rgba(236,72,153,0.10)",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253M3 12c0 .778.099 1.533.284 2.253"/>
+        </svg>
+      ),
+    },
+    {
+      key:        "community",
+      label:      "Community",
+      centreType: "Community Centre",
+      accent:     "#f97316",
+      bg:         "rgba(249,115,22,0.10)",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/>
+        </svg>
+      ),
+    },
+  ];
 
-        setStats({
-          total:      getTotal(results[0]),
-          breakdowns: config.breakdowns.map((b, i) => ({
-            ...b,
-            count: getTotal(results[i + 1]),
-          })),
-          active: getTotal(results[results.length - 1]),
-        });
-      } catch {
-        setStats({ total: 0, breakdowns: config.breakdowns.map((b) => ({ ...b, count: 0 })), active: 0 });
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const results = await Promise.all(
+          SECTIONS.map(async (sec) => {
+            const [totalRes, activeRes] = await Promise.all([
+              axios.get(`/organisations?limit=1&centreType=${encodeURIComponent(sec.centreType)}`),
+              axios.get(`/organisations?limit=1&centreType=${encodeURIComponent(sec.centreType)}&status=Active`),
+            ]);
+
+            const getTotal = (r) =>
+              r?.data?.data?.total ??
+              r?.data?.total ??
+              0;
+
+            return {
+              key:    sec.key,
+              total:  getTotal(totalRes),
+              active: getTotal(activeRes),
+            };
+          })
+        );
+
+        const map = {};
+        results.forEach((r) => { map[r.key] = r; });
+        setStats(map);
+      } catch (err) {
+        console.error("MergedOrgCard fetch error:", err);
+        const fallback = {};
+        SECTIONS.forEach((s) => { fallback[s.key] = { total: 0, active: 0 }; });
+        setStats(fallback);
       } finally {
         setLoading(false);
       }
     };
-    fetchStats();
-  }, [config]);
+    fetchAll();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const inactiveCount = stats ? stats.total - stats.active : 0;
+  const grandTotal = stats
+    ? SECTIONS.reduce((sum, s) => sum + (stats[s.key]?.total ?? 0), 0)
+    : 0;
 
   return (
     <div
-      onClick={() => onNavigate(config.tab)}
+      className="group relative rounded-2xl p-5 cursor-default transition-all duration-200"
+      style={{
+        background: "rgba(30,41,59,0.45)",
+        border: "1px solid rgba(99,102,241,0.18)",
+        boxShadow: "0 4px 32px rgba(99,102,241,0.08)",
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5">
+            Organisations
+          </p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-3xl font-bold text-white tracking-tight">
+              {loading ? (
+                <span className="inline-block w-16 h-8 bg-slate-800/80 rounded-lg animate-pulse" />
+              ) : (
+                <Counter value={grandTotal} />
+              )}
+            </p>
+            <span className="text-sm text-slate-500 font-medium">total</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Live
+        </div>
+      </div>
+
+      {/* 3+3 Grid — Row 1: School, College, NGO | Row 2: Corporate, Online, Community */}
+      <div className="grid grid-cols-3 gap-3">
+        {SECTIONS.map((sec) => {
+          const s        = stats?.[sec.key];
+          const inactive = s ? s.total - s.active : 0;
+
+          return (
+            <button
+              key={sec.key}
+              onClick={() => onNavigate(sec.key)}
+              className="group/sec rounded-xl p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg"
+              style={{
+                background: sec.bg,
+                border: `1px solid ${sec.accent}25`,
+              }}
+            >
+              {/* Icon + Label */}
+              <div className="flex items-center gap-1.5 mb-3">
+                <span style={{ color: sec.accent }}>{sec.icon}</span>
+                <span className="text-xs font-semibold" style={{ color: sec.accent }}>
+                  {sec.label}
+                </span>
+              </div>
+
+              {/* Total count */}
+              <p className="text-2xl font-bold text-white mb-2">
+                {loading ? (
+                  <span className="inline-block w-10 h-6 bg-slate-800/80 rounded animate-pulse" />
+                ) : (
+                  <Counter value={s?.total ?? 0} />
+                )}
+              </p>
+
+              {/* Active / Inactive pills */}
+              {loading ? (
+                <div className="h-5 w-20 bg-slate-800/80 rounded-full animate-pulse" />
+              ) : s ? (
+                <div className="flex flex-col gap-1.5">
+                  <span
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium w-fit"
+                    style={{
+                      background: "rgba(16,185,129,0.10)",
+                      border:     "1px solid rgba(16,185,129,0.20)",
+                      color:      "#34d399",
+                    }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    {s.active} Active
+                  </span>
+                  {inactive > 0 && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium w-fit"
+                      style={{
+                        background: "rgba(100,116,139,0.15)",
+                        border:     "1px solid rgba(100,116,139,0.20)",
+                        color:      "#94a3b8",
+                      }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                      {inactive} Inactive
+                    </span>
+                  )}
+                </div>
+              ) : null}
+
+              {/* View all hint on hover */}
+              <div
+                className="flex items-center gap-1 mt-3 opacity-0 group-hover/sec:opacity-100 transition-opacity text-[11px] font-medium"
+                style={{ color: sec.accent }}
+              >
+                View all
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                </svg>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+// ─── VOLUNTEER CARD (standalone) ──────────────────────────────────────────────
+function VolunteerCard({ onNavigate }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const accent  = "#f59e0b";
+  const bg      = "rgba(245,158,11,0.08)";
+  const border  = "rgba(245,158,11,0.18)";
+  const breakdowns = [
+    { key: "area_of_interest", value: "Teaching",    label: "Teaching",    color: "#6366f1" },
+    { key: "area_of_interest", value: "Tech",        label: "Tech",        color: "#0ea5e9" },
+    { key: "area_of_interest", value: "Social Work", label: "Social Work", color: "#10b981" },
+    { key: "area_of_interest", value: "Healthcare",  label: "Healthcare",  color: "#f59e0b" },
+  ];
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const [totalRes, activeRes, ...bdRes] = await Promise.all([
+          axios.get(`/organisations/volunteers?limit=1`),
+          axios.get(`/organisations/volunteers?limit=1&status=Active`),
+          ...breakdowns.map((b) =>
+            axios.get(`/organisations/volunteers?limit=1&area_of_interest=${encodeURIComponent(b.value)}`)
+          ),
+        ]);
+        const getT = (r) => r?.data?.data?.total ?? r?.data?.total ?? 0;
+        setStats({
+          total: getT(totalRes),
+          active: getT(activeRes),
+          breakdowns: breakdowns.map((b, i) => ({ ...b, count: getT(bdRes[i]) })),
+        });
+      } catch {
+        setStats({ total: 0, active: 0, breakdowns: breakdowns.map((b) => ({ ...b, count: 0 })) });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetch();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const inactive = stats ? stats.total - stats.active : 0;
+
+  return (
+    <div
+      onClick={() => onNavigate("volunteer")}
       className="group relative rounded-2xl p-5 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
       style={{
-        background:   config.bg,
-        border:       `1px solid ${config.border}`,
-        boxShadow:    `0 4px 24px ${config.accent}10`,
+        background: bg,
+        border: `1px solid ${border}`,
+        boxShadow: `0 4px 24px ${accent}10`,
       }}
     >
       {/* Hover glow */}
       <div
         className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-        style={{ background: `radial-gradient(ellipse at 50% 0%, ${config.accent}12, transparent 70%)` }}
+        style={{ background: `radial-gradient(ellipse at 50% 0%, ${accent}12, transparent 70%)` }}
       />
 
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div
           className="w-11 h-11 rounded-xl flex items-center justify-center"
-          style={{ background: `${config.accent}15`, border: `1px solid ${config.accent}25` }}>
-          <span style={{ color: config.accent }}>{config.icon}</span>
+          style={{ background: `${accent}15`, border: `1px solid ${accent}25` }}>
+          <span style={{ color: accent }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </span>
         </div>
         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 group-hover:text-slate-400 transition-colors">
           View all
@@ -187,7 +352,7 @@ function StatCard({ config, onNavigate }) {
         </div>
       </div>
 
-      {/* Total count */}
+      {/* Total */}
       <div className="mb-1">
         <p className="text-3xl font-bold text-white tracking-tight">
           {loading ? (
@@ -196,22 +361,20 @@ function StatCard({ config, onNavigate }) {
             <Counter value={stats?.total ?? 0} />
           )}
         </p>
-        <p className="text-sm font-medium mt-0.5" style={{ color: config.accent }}>
-          {config.label}
-        </p>
+        <p className="text-sm font-medium mt-0.5" style={{ color: accent }}>Volunteers</p>
       </div>
 
-      {/* Active / Inactive pill row */}
+      {/* Active / Inactive pills */}
       {!loading && stats && (
         <div className="flex items-center gap-2 mb-4">
           <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             {stats.active} Active
           </span>
-          {inactiveCount > 0 && (
+          {inactive > 0 && (
             <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-slate-700/50 text-slate-500 border border-slate-700/40">
               <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
-              {inactiveCount} Inactive
+              {inactive} Inactive
             </span>
           )}
         </div>
@@ -220,7 +383,7 @@ function StatCard({ config, onNavigate }) {
       {/* Breakdown bars */}
       <div className="space-y-2.5 border-t border-slate-800/40 pt-3">
         {loading ? (
-          Array.from({ length: config.breakdowns.length }).map((_, i) => (
+          Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="space-y-1">
               <div className="h-2.5 w-24 bg-slate-800/80 rounded animate-pulse" />
               <div className="h-1 w-full bg-slate-800/80 rounded animate-pulse" />
@@ -228,16 +391,16 @@ function StatCard({ config, onNavigate }) {
           ))
         ) : (
           stats?.breakdowns.map((b) => (
-  <div key={b.value}>
-    <div className="flex items-center justify-between mb-1">
-      <span className="text-xs text-slate-500 font-medium">{b.label}</span>
-      <span className="text-xs font-bold tabular-nums" style={{ color: b.color }}>
-        {b.count.toLocaleString()}
-      </span>
-    </div>
-    <ProgressBar value={b.count} total={stats.total} color={b.color} />
-  </div>
-))
+            <div key={b.value}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-slate-500 font-medium">{b.label}</span>
+                <span className="text-xs font-bold tabular-nums" style={{ color: b.color }}>
+                  {b.count.toLocaleString()}
+                </span>
+              </div>
+              <ProgressBar value={b.count} total={stats.total} color={b.color} />
+            </div>
+          ))
         )}
       </div>
     </div>
@@ -265,6 +428,166 @@ function QuickAction({ icon, label, sublabel, onClick, accent }) {
         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
       </svg>
     </button>
+  );
+}
+
+// ─── Follow-up reminder card ──────────────────────────────────────────────────
+// ─── Follow-up reminder card ──────────────────────────────────────────────────
+// FIXED:
+//   1. /organisations/schools → /organisations?centreType=School
+//   2. /organisations/colleges → /organisations?centreType=College
+//   3. /organisations/ngos → /organisations?centreType=NGO
+//   4. Removed follow_up_date (field doesn't exist in Organisation model)
+//   5. Sort by createdAt instead
+function FollowUpCard({ onNavigate }) {
+  const [items, setItems]     = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const today   = new Date().toISOString().split("T")[0];
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const endpoints = [
+      {
+        label:  "School",
+        tab:    "school",
+        // ✅ FIXED: use /organisations?centreType=School
+        url:    `/organisations?limit=3&centreType=School&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
+        dataKey: "organisations",
+        accent: "#6366f1",
+      },
+      {
+        label:  "College",
+        tab:    "college",
+        url:    `/organisations?limit=3&centreType=College&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
+        dataKey: "organisations",
+        accent: "#0ea5e9",
+      },
+      {
+        label:  "NGO",
+        tab:    "ngo",
+        url:    `/organisations?limit=3&centreType=NGO&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
+        dataKey: "organisations",
+        accent: "#10b981",
+      },
+      {
+        label:  "Corporate",
+        tab:    "corporate",
+        url:    `/organisations?limit=3&centreType=Corporate&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
+        dataKey: "organisations",
+        accent: "#f59e0b",
+      },
+      {
+        label:  "Online",
+        tab:    "online",
+        url:    `/organisations?limit=3&centreType=Online&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
+        dataKey: "organisations",
+        accent: "#ec4899",
+      },
+      {
+        label:  "Community",
+        tab:    "community",
+        url:    `/organisations?limit=3&centreType=Community%20Centre&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
+        dataKey: "organisations",
+        accent: "#f97316",
+      },
+      {
+        label:  "Volunteer",
+        tab:    "volunteer",
+        url:    `/organisations/volunteers?limit=3&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
+        dataKey: "volunteers",
+        accent: "#f59e0b",
+      },
+    ];
+
+    Promise.all(
+      endpoints.map((e) => axios.get(e.url).catch(() => null))
+    )
+      .then((results) => {
+        const all = [];
+        results.forEach((res, i) => {
+          const data  = res?.data?.data ?? res?.data ?? {};
+          const key   = endpoints[i].dataKey;
+          const rows  = data[key] ?? [];
+          rows.forEach((r) => {
+            all.push({
+              ...r,
+              _catLabel: endpoints[i].label,
+              _tab:      endpoints[i].tab,
+              _accent:   endpoints[i].accent,
+            });
+          });
+        });
+
+        // Sort by createdAt descending (newest first)
+        all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setItems(all.slice(0, 6));
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Format date
+  const fmtDate = (d) =>
+    new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+
+  // Check if added in last 24 hours
+  const isNew = (d) =>
+    new Date(d) > new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <div className="auth-card">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          <h3 className="text-sm font-semibold text-white">Recently Added</h3>
+        </div>
+        <span className="text-xs text-slate-500">Last 7 days</span>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-10 bg-slate-800/60 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <button
+              key={item._id}
+              onClick={() => onNavigate(item._tab)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:translate-x-0.5 text-left group"
+              style={{
+                background: `${item._accent}08`,
+                border:     `1px solid ${item._accent}18`,
+              }}
+            >
+              <div
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: item._accent }}
+              />
+              <div className="flex-1 min-w-0">
+                {/* Organisation uses centreName, Volunteer uses name */}
+                <p className="text-sm font-medium text-white truncate">
+                  {item.centreName ?? item.name}
+                </p>
+                <p className="text-xs text-slate-500">{item._catLabel}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-xs font-semibold text-slate-400">
+                  {fmtDate(item.createdAt)}
+                </p>
+                {isNew(item.createdAt) && (
+                  <p className="text-[10px] text-emerald-400 font-medium">New</p>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -301,9 +624,7 @@ export default function DashboardPage() {
     if (result.success) { setEditMode(false); setPreview(null); setImageFile(null); }
   };
 
-  const handleCardClick = (tab) => {
-    navigate("/admin", { state: { tab } });
-  };
+  const handleCardClick = (tab) => navigate("/admin", { state: { tab } });
 
   const avatarUrl = preview || user?.profileImage?.url;
   const initials  = user?.fullName?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -341,7 +662,7 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-          {/* ── LEFT COL: Profile card + Quick actions ── */}
+          {/* ── LEFT COL ── */}
           <div className="flex flex-col gap-4">
 
             {/* Profile card */}
@@ -458,7 +779,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-          
+            {/* Security card */}
             <div className="auth-card">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Security</h3>
               <div className="flex items-center justify-between py-2.5 border-b border-slate-800/60">
@@ -483,14 +804,14 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── RIGHT COL: Stat cards (2×2 grid) ── */}
+          {/* ── RIGHT COL ── */}
           <div className="lg:col-span-2 flex flex-col gap-4">
 
             {/* Section header */}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-white">Organisation Overview</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click any card to open that section in the admin panel</p>
+                <p className="text-xs text-slate-500 mt-0.5">Click any section to open it in the admin panel</p>
               </div>
               <div className="flex items-center gap-1.5 text-xs text-slate-600">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>
@@ -498,14 +819,13 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 2×2 stat grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Object.entries(STAT_CONFIG).map(([key, config]) => (
-                <StatCard key={key} config={config} onNavigate={handleCardClick} />
-              ))}
-            </div>
+            {/* Merged Org Card (Schools + Colleges + NGOs) */}
+            <MergedOrgCard onNavigate={handleCardClick} />
 
-            {/* Follow-up reminder card */}
+            {/* Volunteer Card */}
+            <VolunteerCard onNavigate={handleCardClick} />
+
+            {/* Follow-up reminder */}
             <FollowUpCard onNavigate={handleCardClick} />
           </div>
         </div>
@@ -514,88 +834,6 @@ export default function DashboardPage() {
       <footer className="border-t border-slate-800/60 py-5 text-center mt-6">
         <p className="text-slate-600 text-xs">© {new Date().getFullYear()} DB Manager. All rights reserved.</p>
       </footer>
-    </div>
-  );
-}
-
-// ─── Follow-up reminder card ──────────────────────────────────────────────────
-// Shows records whose follow_up_date is today or in the past (overdue)
-function FollowUpCard({ onNavigate }) {
-  const [items, setItems]     = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const today    = new Date().toISOString().split("T")[0];
-    const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-    const endpoints = [
-      { label: "School",    tab: "school",    url: `/organisations/schools?limit=3&dateFrom=${weekAgo}&dateTo=${today}&sortField=follow_up_date&sortDir=asc`,    accent: "#6366f1" },
-      { label: "College",   tab: "college",   url: `/organisations/colleges?limit=3&dateFrom=${weekAgo}&dateTo=${today}&sortField=follow_up_date&sortDir=asc`,   accent: "#0ea5e9" },
-      { label: "NGO",       tab: "ngo",       url: `/organisations/ngos?limit=3&dateFrom=${weekAgo}&dateTo=${today}&sortField=follow_up_date&sortDir=asc`,       accent: "#10b981" },
-      { label: "Volunteer", tab: "volunteer", url: `/organisations/volunteers?limit=3&dateFrom=${weekAgo}&dateTo=${today}&sortField=follow_up_date&sortDir=asc`, accent: "#f59e0b" },
-    ];
-
-    Promise.all(endpoints.map((e) => axios.get(e.url).catch(() => null)))
-      .then((results) => {
-        const all = [];
-        results.forEach((res, i) => {
-          const data = res?.data?.data ?? res?.data ?? {};
-          const key  = ["schools","colleges","ngos","volunteers"][i];
-          (data[key] || []).forEach((r) => {
-            all.push({ ...r, _catLabel: endpoints[i].label, _tab: endpoints[i].tab, _accent: endpoints[i].accent });
-          });
-        });
-        // Sort by follow_up_date ascending
-        all.sort((a, b) => new Date(a.follow_up_date) - new Date(b.follow_up_date));
-        setItems(all.slice(0, 5));
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  const fmtDate = (d) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-  const isOverdue = (d) => new Date(d) < new Date(new Date().setHours(0,0,0,0));
-
-  if (!loading && items.length === 0) return null;
-
-  return (
-    <div className="auth-card">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <h3 className="text-sm font-semibold text-white">Pending Follow-ups</h3>
-        </div>
-        <span className="text-xs text-slate-500">Last 7 days</span>
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">
-          {[1,2,3].map((i) => (
-            <div key={i} className="h-10 bg-slate-800/60 rounded-xl animate-pulse" />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <button
-              key={item._id}
-              onClick={() => onNavigate(item._tab)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:translate-x-0.5 text-left group"
-              style={{ background: `${item._accent}08`, border: `1px solid ${item._accent}18` }}>
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: item._accent }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{item.name}</p>
-                <p className="text-xs text-slate-500">{item._catLabel}</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className={`text-xs font-semibold ${isOverdue(item.follow_up_date) ? "text-red-400" : "text-amber-400"}`}>
-                  {fmtDate(item.follow_up_date)}
-                </p>
-                <p className="text-xs text-slate-600">{isOverdue(item.follow_up_date) ? "Overdue" : "Due"}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -26,11 +26,16 @@ export function useDebounce(fn, delay) {
 
 // ── Build API payload from a row + field list ─────────────────────────────────
 
+// ── Build API payload from a row + field list ─────────────────────────────────
+// ── Build API payload from a row + field list ─────────────────────────────────
 export function buildPayload(row, fields) {
   const payload = {};
+
   fields.forEach((f) => {
-    if (row[f] !== undefined && row[f] !== "") {
-      if (["established_year","total_students","total_departments","experience_years"].includes(f)) {
+    if (f === "contacts") return;
+
+    if (row[f] !== undefined && String(row[f]).trim() !== "") {
+      if (["established_year", "total_students", "total_departments", "experience_years"].includes(f)) {
         const n = parseInt(row[f]);
         if (!isNaN(n)) payload[f] = n;
       } else if (f === "skills") {
@@ -40,9 +45,33 @@ export function buildPayload(row, fields) {
       }
     }
   });
+
+  // ====================== ORGANISATION FIX ======================
+  if (fields.includes("contacts")) {
+    let email = String(row.email || "").trim().toLowerCase();
+    const isValidEmail = email.includes("@") && email.includes(".") && email.length > 5;
+
+    payload.contacts = [{
+      name:          String(row.contactPerson || row.name || "Administrator").trim(),
+      designation:   String(row.designation || "Administrator").trim(),
+      contactNumber: String(row.phone || row.mobile || row.contactNumber || "9999999999").trim(),
+      email: isValidEmail ? email : `import-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}@example.com`,
+    }];
+  }
+
+  // Default values for missing required fields
+  if (!payload.district) {
+    payload.district = row.district || row.city || "Unknown District";
+  }
+  if (!payload.website) {
+    payload.website = "https://example.com";
+  }
+  if (!payload.onboardedBy) {
+    payload.onboardedBy = "System Import";
+  }
+
   return payload;
 }
-
 // ── Excel sheet row parser ────────────────────────────────────────────────────
 
 export function parseSheetRows(ws, fieldMap) {
@@ -67,17 +96,15 @@ export function parseSheetRows(ws, fieldMap) {
       });
       return obj;
     })
-    .filter((r) => r.name && r.name.length > 0);
+    .filter((r) => Object.keys(r).length > 0);
 }
 
 // ── Detect category from sheet name ──────────────────────────────────────────
 
 export function detectCatFromSheetName(sheetName) {
   const l = sheetName.toLowerCase();
-  if (l.includes("school"))    return "school";
-  if (l.includes("college"))   return "college";
-  if (l.includes("ngo"))       return "ngo";
-  if (l.includes("volunteer")) return "volunteer";
+  if (l.includes("volunteer"))                              return "volunteer";
+  if (l.includes("organisation") || l.includes("center") || l.includes("centre")) return "organisation";
   return null;
 }
 
@@ -147,6 +174,12 @@ export function validatePlan(active) {
   active.forEach((p) => {
     p.rows.forEach((row, i) => {
       p.requiredFields.forEach((f) => {
+        // FIX: "contacts" requires at least phone or email to be present in the row
+        if (f === "contacts") {
+          if (!row.phone && !row.email)
+            errors.push(`${p.catLabel} — Row ${i + 1}: "contacts" (phone/email) is missing`);
+          return;
+        }
         if (!row[f] || String(row[f]).trim() === "")
           errors.push(`${p.catLabel} — Row ${i + 1}: "${f}" is missing`);
       });

@@ -1,20 +1,53 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import useAuthStore from "./context/authStore";
 import ProtectedRoute from "./components/ProtectedRoute";
-import SignupPage from "./pages/SignupPage";
-import LoginPage from "./pages/LoginPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import DashboardPage from "./pages/DashboardPage";
-import HomePage from "./pages/HomePage";
-import AboutPage from "./pages/AboutPage";
-import AdminPage from "./pages/AdminPage";
 import ScrollToTop from "./components/Scrolltop";
-import OrganisationPage from "./pages/OrganisationPage";
-import VolunteerFormPage from "./pages/VolunteerFormPage";
-import OrganisationFormPage from "./pages/OrganisationFormPage";
+import RouteChangeLoader from "./components/RouteChangeLoader";
+
+// ── Lazy imports ──────────────────────────────────────────────
+const SignupPage           = lazy(() => import("./pages/SignupPage"));
+const LoginPage            = lazy(() => import("./pages/LoginPage"));
+const ForgotPasswordPage   = lazy(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage    = lazy(() => import("./pages/ResetPasswordPage"));
+const DashboardPage        = lazy(() => import("./pages/DashboardPage"));
+const HomePage             = lazy(() => import("./pages/HomePage"));
+const ProfilePage          = lazy(() => import("./pages/Profilepage"));
+const AboutPage            = lazy(() => import("./pages/AboutPage"));
+const AdminPage            = lazy(() => import("./pages/AdminPage"));
+const OrganisationPage     = lazy(() => import("./pages/OrganisationPage"));
+const VolunteerFormPage    = lazy(() => import("./pages/VolunteerFormPage"));
+const OrganisationFormPage = lazy(() => import("./pages/OrganisationFormPage"));
+
+// ── Page loader (Suspense fallback - pehli baar load ke liye) ─
+function PageLoader() {
+  return (
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "#0c0c14",
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{
+          width: "40px",
+          height: "40px",
+          border: "2px solid #6366f1",
+          borderTopColor: "transparent",
+          borderRadius: "50%",
+          animation: "spin 0.7s linear infinite",
+          margin: "0 auto 12px",
+        }} />
+        <p style={{ color: "#94a3b8", fontSize: "14px" }}>Loading...</p>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ── Admin Only Guard ──────────────────────────────────────────
 const AdminOnly = ({ children }) => {
   const { user } = useAuthStore();
   return (
@@ -24,23 +57,13 @@ const AdminOnly = ({ children }) => {
   );
 };
 
+// ── App ───────────────────────────────────────────────────────
 export default function App() {
   const { checkAuth, isAuthenticated, isCheckingAuth } = useAuthStore();
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  useEffect(() => { checkAuth(); }, []);
 
-  if (isCheckingAuth) {
-    return (
-      <div className="auth-bg min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  if (isCheckingAuth) return <PageLoader />;
 
   return (
     <BrowserRouter>
@@ -56,72 +79,51 @@ export default function App() {
             fontSize: "14px",
           },
           success: { iconTheme: { primary: "#6366f1", secondary: "#fff" } },
-          error: { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
+          error:   { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
         }}
       />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route
-          path="/login"
-          element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />}
-        />
-        <Route
-          path="/signup"
-          element={!isAuthenticated ? <SignupPage /> : <Navigate to="/" replace />}
-        />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <AdminOnly>
-              <DashboardPage />
-            </AdminOnly>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <AdminOnly>
-              <AdminPage />
-            </AdminOnly>
-          }
-        />
-        <Route
-          path="/organisation"
-          element={
-            <AdminOnly>
-              <OrganisationPage />
-            </AdminOnly>
-          }
-        />
-        <Route
-          path="/organisation/add"
-          element={
-            <AdminOnly>
-              <OrganisationFormPage />
-            </AdminOnly>
-          }
-        />
-        <Route
-          path="/organisation/volunteer"
-          element={
-            <AdminOnly>
-              <VolunteerFormPage />
-            </AdminOnly>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+
+      <Suspense fallback={<PageLoader />}>
+        {/* ── Har route change pe loader dikhega ── */}
+        <RouteChangeLoader />
+
+        <Routes>
+          <Route path="/"      element={<HomePage />} />
+          <Route path="/about" element={<AboutPage />} />
+
+          <Route path="/login"
+            element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />}
+          />
+          <Route path="/signup"
+            element={!isAuthenticated ? <SignupPage /> : <Navigate to="/" replace />}
+          />
+
+          <Route path="/forgot-password"       element={<ForgotPasswordPage />} />
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+
+          <Route path="/profile"
+            element={<ProtectedRoute><ProfilePage /></ProtectedRoute>}
+          />
+
+          <Route path="/dashboard"
+            element={<AdminOnly><DashboardPage /></AdminOnly>}
+          />
+          <Route path="/admin"
+            element={<AdminOnly><AdminPage /></AdminOnly>}
+          />
+          <Route path="/organisation"
+            element={<AdminOnly><OrganisationPage /></AdminOnly>}
+          />
+          <Route path="/organisation/add"
+            element={<AdminOnly><OrganisationFormPage /></AdminOnly>}
+          />
+          <Route path="/organisation/volunteer"
+            element={<AdminOnly><VolunteerFormPage /></AdminOnly>}
+          />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

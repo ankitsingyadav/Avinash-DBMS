@@ -78,21 +78,23 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
         // Try bulk endpoint first
         try {
           const payloads = batch.map((r) => buildPayload(r, p.fields));
+console.table(payloads[0]); // shows you exact keys + values side by side
           await axios.post(`${p.endpoint}/bulk`, { records: payloads });
           success += batch.length;
         } catch {
           // Fallback: parallel individual requests
-          const settled = await Promise.allSettled(
-            batch.map((r) => axios.post(p.endpoint, buildPayload(r, p.fields)))
-          );
-          settled.forEach((r, i) => {
-            if (r.status === "fulfilled") success++;
-            else {
-              failed++;
-              if (import.meta.env.DEV)
-                console.warn(`[Import] Failed: ${batch[i]?.name}`, r.reason?.response?.data);
-            }
-          });
+          // Fallback: parallel individual requests
+const settled = await Promise.allSettled(
+  batch.map((r) => axios.post(p.endpoint, buildPayload(r, p.fields)))
+);
+settled.forEach((r, i) => {
+  if (r.status === "fulfilled") success++;
+  else {
+    failed++;
+    console.warn(`[Import] Failed row:`, batch[i]);                    // ✅ row data
+    console.warn(`[Import] Error:`, r.reason?.response?.data);         // ✅ backend error message
+  }
+});
         }
 
         done += batch.length;
