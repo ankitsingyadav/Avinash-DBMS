@@ -4,6 +4,7 @@ import Header from '../components/Header'
 import FAQ from '../pages/FAQ'
 import Footer from '../pages/Footer'
 import AboutData from '../components/Aboutdata'
+
 const AboutPage = () => {
   return (
     <div>

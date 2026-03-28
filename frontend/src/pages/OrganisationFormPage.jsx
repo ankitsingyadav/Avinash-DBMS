@@ -1,4 +1,4 @@
-// OrganisationFormPage.jsx — Updated with LocationSelector (cascading dropdowns + pincode autofill)
+// OrganisationFormPage.jsx — Updated with all requested changes
 import React, { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,7 +8,9 @@ import axios from "../utils/axios";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { inputCls } from "../admin/components/ui";
-import LocationSelector from "../components/LocationSelector"; // ← NEW
+import LocationSelector from "../components/LocationSelector";
+
+const INTERACTION_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
 
 const organisationSchema = z.object({
   centreType: z.enum(["School", "College", "NGO", "Corporate", "Online", "Community Centre"], {
@@ -24,12 +26,15 @@ const organisationSchema = z.object({
     .refine((val) => !val || /^https?:\/\/.+/.test(val), {
       message: "Website must start with http:// or https://",
     }),
-  address: z.string().min(5, "Address is required"),
-  // ── Location fields now include district
+
+  // ── Location now comes before address ──
   state:    z.string().min(1, "State is required"),
   district: z.string().min(1, "District is required"),
   city:     z.string().min(1, "City is required"),
   pincode:  z.string().regex(/^\d{6}$/, "Pincode must be a 6-digit number"),
+
+  address: z.string().min(5, "Address is required"),
+
   contacts: z
     .array(
       z.object({
@@ -39,8 +44,25 @@ const organisationSchema = z.object({
         email:         z.string().email("Invalid email address"),
       })
     )
-    .min(1, "At least one contact person is required"),
+    .min(1, "At least one contact person is required")
+    .max(4, "Maximum 4 contact persons allowed"),
+
+  // ── Interaction Remarks ──
+  interaction: z.object({
+    interactionBy:         z.string().min(1, "Interaction by is required"),
+    interactedWith:        z.string().min(1, "Interacted with is required"),
+    interactionDate:       z.string().min(1, "Interaction date is required"),
+    notes:                 z.string().optional(),
+    ninAin:                z.string().optional(),
+    nextInteractionDate:   z.string().optional(),
+    interactionMode:       z.enum(["Email", "Phone", "WhatsApp", "Visit"], {
+      errorMap: () => ({ message: "Please select a valid interaction mode" }),
+    }),
+  }),
+
+  // ── Additional Details ──
   onboardedBy: z.string().min(1, "Onboarded by is required"),
+  ninAin:      z.string().optional(), // NIN/AIN in onboarding section
 });
 
 const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
@@ -58,6 +80,7 @@ const OrganisationFormPage = () => {
     setValue,
     getValues,
     trigger,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(organisationSchema),
@@ -65,17 +88,28 @@ const OrganisationFormPage = () => {
       centreType:  "",
       centreName:  "",
       website:     "",
-      address:     "",
       state:       "",
       district:    "",
       city:        "",
       pincode:     "",
+      address:     "",
       contacts:    [{ name: "", designation: "", contactNumber: "", email: "" }],
+      interaction: {
+        interactionBy:       "",
+        interactedWith:      "",
+        interactionDate:     "",
+        notes:               "",
+        ninAin:              "",
+        nextInteractionDate: "",
+        interactionMode:     "",
+      },
       onboardedBy: "",
+      ninAin:      "",
     },
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "contacts" });
+  const contactCount = fields.length;
 
   const onSubmit = (data) => {
     setFormData(data);
@@ -130,7 +164,11 @@ const OrganisationFormPage = () => {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Section 1: Centre Information */}
+
+          {/* ═══════════════════════════════════════════════════════════════
+              Section 1: Centre Information
+              Order: Type → Name → Website → LocationSelector → Full Address
+          ═══════════════════════════════════════════════════════════════ */}
           <div className="bg-[#13131f]/50 border border-slate-800/60 rounded-2xl p-6">
             <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-6 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-indigo-500 rounded-full" />
@@ -138,8 +176,9 @@ const OrganisationFormPage = () => {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Centre Type */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 ml-1">Centre Type *</label>
+                <label className="text-xs font-medium text-slate-400 ml-1">Insitution Type *</label>
                 <select {...register("centreType")} className={inputCls(!!errors.centreType)}>
                   <option value="">Select Type</option>
                   {CENTRE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -147,8 +186,9 @@ const OrganisationFormPage = () => {
                 {errors.centreType && <p className="text-[10px] text-red-400 ml-1">{errors.centreType.message}</p>}
               </div>
 
+              {/* Centre Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 ml-1">Centre Name *</label>
+                <label className="text-xs font-medium text-slate-400 ml-1">Insitution Name *</label>
                 <input
                   {...register("centreName")}
                   placeholder="e.g. St. Xavier's School"
@@ -157,6 +197,7 @@ const OrganisationFormPage = () => {
                 {errors.centreName && <p className="text-[10px] text-red-400 ml-1">{errors.centreName.message}</p>}
               </div>
 
+              {/* Website */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-400 ml-1">Website (Optional)</label>
                 <input
@@ -166,20 +207,9 @@ const OrganisationFormPage = () => {
                 />
                 {errors.website && <p className="text-[10px] text-red-400 ml-1">{errors.website.message}</p>}
               </div>
-
-              <div className="space-y-1.5 md:col-span-2">
-                <label className="text-xs font-medium text-slate-400 ml-1">Full Address *</label>
-                <textarea
-                  {...register("address")}
-                  rows={2}
-                  placeholder="Building, Street, Area..."
-                  className={inputCls(!!errors.address) + " resize-none"}
-                />
-                {errors.address && <p className="text-[10px] text-red-400 ml-1">{errors.address.message}</p>}
-              </div>
             </div>
 
-            {/* ── LocationSelector replaces state / city / pincode fields ── */}
+            {/* ── LocationSelector (moved above Full Address) ── */}
             <div className="mt-6 pt-6 border-t border-slate-800/60">
               <LocationSelector
                 mode="rhf"
@@ -192,14 +222,36 @@ const OrganisationFormPage = () => {
                 trigger={trigger}
               />
             </div>
+
+            {/* ── Full Address (moved below LocationSelector) ── */}
+            <div className="mt-6 pt-6 border-t border-slate-800/60">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 ml-1"> Street Details *</label>
+                <textarea
+                  {...register("address")}
+                  rows={2}
+                  placeholder="Building, Street, Area..."
+                  className={inputCls(!!errors.address) + " resize-none"}
+                />
+                {errors.address && <p className="text-[10px] text-red-400 ml-1">{errors.address.message}</p>}
+              </div>
+            </div>
           </div>
 
-          {/* Section 2: Contact Person Details */}
+          {/* ═══════════════════════════════════════════════════════════════
+              Section 2: Contact Person Details (max 4)
+          ═══════════════════════════════════════════════════════════════ */}
           <div className="bg-[#13131f]/50 border border-slate-800/60 rounded-2xl p-6">
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-6 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-1 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-emerald-500 rounded-full" />
               Contact Person Details
             </h2>
+            <p className="text-[11px] text-slate-500 mb-6">
+              You can add up to 4 contact persons.&nbsp;
+              <span className={contactCount >= 4 ? "text-amber-400 font-semibold" : "text-slate-600"}>
+                {contactCount}/4 added
+              </span>
+            </p>
 
             <div className="space-y-6">
               {fields.map((field, index) => (
@@ -274,20 +326,159 @@ const OrganisationFormPage = () => {
                 </div>
               ))}
 
-              <button
-                type="button"
-                onClick={() => append({ name: "", designation: "", contactNumber: "", email: "" })}
-                className="w-full py-3 border-2 border-dashed border-slate-700/50 rounded-xl text-slate-500 hover:text-indigo-400 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
-                </svg>
-                Add another contact person
-              </button>
+              {/* Add contact button — hidden when limit reached */}
+              {contactCount < 4 ? (
+                <button
+                  type="button"
+                  onClick={() => append({ name: "", designation: "", contactNumber: "", email: "" })}
+                  className="w-full py-3 border-2 border-dashed border-slate-700/50 rounded-xl text-slate-500 hover:text-indigo-400 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all text-sm font-medium flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                  </svg>
+                  Add another contact person
+                </button>
+              ) : (
+                <div className="w-full py-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-amber-400/70 text-sm text-center font-medium">
+                  Maximum of 4 contact persons reached
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Section 3: Additional Details */}
+          {/* ═══════════════════════════════════════════════════════════════
+              Section 3: Interaction Remarks
+          ═══════════════════════════════════════════════════════════════ */}
+          <div className="bg-[#13131f]/50 border border-slate-800/60 rounded-2xl p-6">
+            <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-6 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-violet-500 rounded-full" />
+              Interaction Remarks
+            </h2>
+
+            {/* ── Part 1: Current Interaction Details ── */}
+            <div>
+              <p className="text-[11px] font-semibold text-violet-400 uppercase tracking-widest mb-4">
+                Current Interaction
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                {/* Interaction By */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-400 ml-1">Interaction By *</label>
+                  <input
+                    {...register("interaction.interactionBy")}
+                    placeholder="Name of person who interacted"
+                    className={inputCls(!!errors.interaction?.interactionBy)}
+                  />
+                  {errors.interaction?.interactionBy && (
+                    <p className="text-[10px] text-red-400 ml-1">{errors.interaction.interactionBy.message}</p>
+                  )}
+                </div>
+
+                {/* Interacted With */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-400 ml-1">Interacted With *</label>
+                  <input
+                    {...register("interaction.interactedWith")}
+                    placeholder="Name of contact person at org"
+                    className={inputCls(!!errors.interaction?.interactedWith)}
+                  />
+                  {errors.interaction?.interactedWith && (
+                    <p className="text-[10px] text-red-400 ml-1">{errors.interaction.interactedWith.message}</p>
+                  )}
+                </div>
+
+                {/* Interaction Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-400 ml-1">Interaction Date *</label>
+                  <input
+                    type="date"
+                    {...register("interaction.interactionDate")}
+                    className={inputCls(!!errors.interaction?.interactionDate)}
+                  />
+                  {errors.interaction?.interactionDate && (
+                    <p className="text-[10px] text-red-400 ml-1">{errors.interaction.interactionDate.message}</p>
+                  )}
+                </div>
+
+                {/* AIN/NIN */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-400 ml-1">AIN / NIN Number</label>
+                  <input
+                    {...register("interaction.ninAin")}
+                    placeholder="Enter AIN or NIN number"
+                    className={inputCls(!!errors.interaction?.ninAin)}
+                  />
+                  {errors.interaction?.ninAin && (
+                    <p className="text-[10px] text-red-400 ml-1">{errors.interaction.ninAin.message}</p>
+                  )}
+                </div>
+
+                {/* Notes — full width */}
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-medium text-slate-400 ml-1">Notes</label>
+                  <textarea
+                    {...register("interaction.notes")}
+                    rows={3}
+                    placeholder="Add any relevant notes about this interaction..."
+                    className={inputCls(!!errors.interaction?.notes) + " resize-none"}
+                  />
+                  {errors.interaction?.notes && (
+                    <p className="text-[10px] text-red-400 ml-1">{errors.interaction.notes.message}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Divider ── */}
+            <div className="my-6 border-t border-slate-700/50 relative">
+              <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-[#13131f] px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                Next Interaction
+              </span>
+            </div>
+
+            {/* ── Part 2: Next Interaction ── */}
+            <div>
+              <p className="text-[11px] font-semibold text-violet-400 uppercase tracking-widest mb-4">
+                Next Interaction Planned
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                {/* Next Interaction Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-400 ml-1">Planned Date</label>
+                  <input
+                    type="date"
+                    {...register("interaction.nextInteractionDate")}
+                    className={inputCls(!!errors.interaction?.nextInteractionDate)}
+                  />
+                  {errors.interaction?.nextInteractionDate && (
+                    <p className="text-[10px] text-red-400 ml-1">{errors.interaction.nextInteractionDate.message}</p>
+                  )}
+                </div>
+
+                {/* Interaction Mode */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-400 ml-1">Interaction Mode *</label>
+                  <select
+                    {...register("interaction.interactionMode")}
+                    className={inputCls(!!errors.interaction?.interactionMode)}
+                  >
+                    <option value="">Select Mode</option>
+                    {INTERACTION_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  {errors.interaction?.interactionMode && (
+                    <p className="text-[10px] text-red-400 ml-1">{errors.interaction.interactionMode.message}</p>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════════════
+              Section 4: Additional Details
+          ═══════════════════════════════════════════════════════════════ */}
           <div className="bg-[#13131f]/50 border border-slate-800/60 rounded-2xl p-6">
             <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-6 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-amber-500 rounded-full" />
@@ -295,6 +486,7 @@ const OrganisationFormPage = () => {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Onboarded By */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-400 ml-1">Centre Onboarded By *</label>
                 <input
@@ -304,6 +496,19 @@ const OrganisationFormPage = () => {
                 />
                 {errors.onboardedBy && (
                   <p className="text-[10px] text-red-400 ml-1">{errors.onboardedBy.message}</p>
+                )}
+              </div>
+
+              {/* NIN/AIN in Onboarding */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 ml-1">NIN / AIN</label>
+                <input
+                  {...register("ninAin")}
+                  placeholder="Enter NIN or AIN number"
+                  className={inputCls(!!errors.ninAin)}
+                />
+                {errors.ninAin && (
+                  <p className="text-[10px] text-red-400 ml-1">{errors.ninAin.message}</p>
                 )}
               </div>
             </div>

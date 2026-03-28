@@ -6,16 +6,89 @@ import axios from "../../utils/axios.js";
 import { CATEGORIES, IMPORT_BATCH_SIZE } from "../constants.js";
 import { parseWorkbook, validatePlan, buildPayload } from "../helpers.js";
 
+// ── Upload a single batch — tries bulk endpoint, falls back to sequential ─────
+//
+// FIX 8: Original fallback used Promise.allSettled (fire-all-at-once) which
+//        hammers the server and makes rate-limit errors worse. Replaced with a
+//        sequential per-record loop so errors are isolated and reported cleanly.
+//
+// FIX 9: Bulk endpoint errors were swallowed silently. Now we log the full
+//        backend response so the developer can see exactly what the server says.
+
+async function uploadBatch(endpoint, batch, fields) {
+  const payloads = batch.map((r) => buildPayload(r, fields));
+
+  // ── Attempt bulk ─────────────────────────────────────────────────────────
+  try {
+    await axios.post(`${endpoint}/bulk`, { records: payloads });
+    return { success: batch.length, failed: 0, errors: [] };
+  } catch (bulkErr) {
+    const bulkMsg =
+      bulkErr?.response?.data?.message ||
+      bulkErr?.response?.data?.error   ||
+      bulkErr?.message                 ||
+      "bulk endpoint failed";
+
+    console.warn(`[Import] Bulk endpoint failed (${endpoint}/bulk):`, bulkMsg);
+    console.warn("[Import] Bulk error detail:", bulkErr?.response?.data);
+  }
+
+  // ── Fallback: sequential individual requests ──────────────────────────────
+  let success = 0;
+  let failed  = 0;
+  const errors = [];
+
+  for (let i = 0; i < batch.length; i++) {
+    try {
+      await axios.post(endpoint, payloads[i]);
+      success++;
+    } catch (singleErr) {
+      failed++;
+      const errMsg =
+        singleErr?.response?.data?.message ||
+        singleErr?.response?.data?.error   ||
+        singleErr?.message                 ||
+        "unknown error";
+
+      errors.push({
+        rowIndex: i,
+        row:      batch[i],
+        payload:  payloads[i],
+        message:  errMsg,
+        status:   singleErr?.response?.status,
+      });
+
+      // Log in a readable format for the developer
+      console.group(`[Import] ✗ Row ${i + 1} failed — ${errMsg}`);
+      console.log("Row data:", batch[i]);
+      console.log("Payload sent:", payloads[i]);
+      console.log("Server response:", singleErr?.response?.data);
+      console.groupEnd();
+    }
+  }
+
+  return { success, failed, errors };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ImportModal({ isOpen, onClose, onUploaded }) {
-  const [step, setStep]         = useState("choose");
-  const [plan, setPlan]         = useState([]);
-  const [upState, setUpState]   = useState({ done: 0, total: 0, catLabel: "", record: "", pct: 0 });
-  const [results, setResults]   = useState([]);
+  const [step,      setStep]      = useState("choose");
+  const [plan,      setPlan]      = useState([]);
+  const [upState,   setUpState]   = useState({ done: 0, total: 0, catLabel: "", record: "", pct: 0 });
+  const [results,   setResults]   = useState([]);
   const [valErrors, setValErrors] = useState([]);
+  const [failLog,   setFailLog]   = useState([]); // detailed failure log shown at end
   const fileRef = useRef();
 
   useEffect(() => {
-    if (!isOpen) { setStep("choose"); setPlan([]); setResults([]); setValErrors([]); }
+    if (!isOpen) {
+      setStep("choose");
+      setPlan([]);
+      setResults([]);
+      setValErrors([]);
+      setFailLog([]);
+    }
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -24,92 +97,134 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
   const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    e.target.value = "";
+    e.target.value = ""; // allow re-selecting the same file
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
         const wb       = XLSX.read(ev.target.result, { type: "array" });
         const detected = parseWorkbook(wb);
+
         if (!detected.length) {
-          toast.error("No recognisable data found. Ensure sheet names contain: Schools, Colleges, NGOs, or Volunteers.");
+          toast.error(
+            "No recognisable data found. Ensure sheet names contain: Volunteers, Centres, Schools, Colleges, or NGOs."
+          );
           return;
         }
+
+        // Dev-friendly preview log
+        detected.forEach((d) => {
+          console.log(
+            `[Import] Detected "${d.catLabel}" — ${d.rows.length} rows from sheets: ${d.sheets.join(", ")}`
+          );
+          if (d.rows.length > 0) console.log("[Import] Sample row:", d.rows[0]);
+        });
+
         setPlan(detected);
         setStep("preview");
       } catch (err) {
-        console.error("File parse error:", err);
+        console.error("[Import] File parse error:", err);
         toast.error("Failed to parse file. Please check the format and try again.");
       }
     };
     reader.readAsArrayBuffer(file);
   };
 
-  const totalSel = plan.filter((p) => p.checked).reduce((s, p) => s + p.rows.length, 0);
+  const totalSel = plan
+    .filter((p) => p.checked)
+    .reduce((s, p) => s + p.rows.length, 0);
 
   // ── Upload ──────────────────────────────────────────────────────────────────
   const handleUpload = async () => {
     const active = plan.filter((p) => p.checked);
+    if (!active.length) return;
 
-    // Validate required fields first
+    // ── Validate first ────────────────────────────────────────────────────
     const errors = validatePlan(active);
     if (errors.length > 0) {
-      setValErrors(errors.slice(0, 10));
+      setValErrors(errors.slice(0, 20));
       setStep("validation-error");
       return;
     }
 
+    // ── Begin upload ──────────────────────────────────────────────────────
     const total = active.reduce((s, p) => s + p.rows.length, 0);
     setUpState({ done: 0, total, catLabel: "", record: "", pct: 0 });
     setStep("uploading");
-    const finals = [];
+
+    const finals   = [];
+    const allFails = [];
     let done = 0;
 
     for (const p of active) {
-      let success = 0, failed = 0;
+      let catSuccess = 0;
+      let catFailed  = 0;
 
-      // Split into batches of IMPORT_BATCH_SIZE
+      // Split into batches
       const batches = [];
       for (let i = 0; i < p.rows.length; i += IMPORT_BATCH_SIZE)
         batches.push(p.rows.slice(i, i + IMPORT_BATCH_SIZE));
 
-      for (const batch of batches) {
-        setUpState((prev) => ({ ...prev, catLabel: p.catLabel, record: batch[0]?.name || "…" }));
+      console.group(`[Import] Starting "${p.catLabel}" — ${p.rows.length} rows in ${batches.length} batch(es)`);
 
-        // Try bulk endpoint first
-        try {
-          const payloads = batch.map((r) => buildPayload(r, p.fields));
-console.table(payloads[0]); // shows you exact keys + values side by side
-          await axios.post(`${p.endpoint}/bulk`, { records: payloads });
-          success += batch.length;
-        } catch {
-          // Fallback: parallel individual requests
-          // Fallback: parallel individual requests
-const settled = await Promise.allSettled(
-  batch.map((r) => axios.post(p.endpoint, buildPayload(r, p.fields)))
-);
-settled.forEach((r, i) => {
-  if (r.status === "fulfilled") success++;
-  else {
-    failed++;
-    console.warn(`[Import] Failed row:`, batch[i]);                    // ✅ row data
-    console.warn(`[Import] Error:`, r.reason?.response?.data);         // ✅ backend error message
-  }
-});
+      for (let bi = 0; bi < batches.length; bi++) {
+        const batch = batches[bi];
+        const firstRecord = batch[0]?.centreName || batch[0]?.name || `Batch ${bi + 1}`;
+
+        setUpState((prev) => ({
+          ...prev,
+          catLabel: p.catLabel,
+          record:   firstRecord,
+        }));
+
+        const { success, failed, errors: batchErrors } = await uploadBatch(
+          p.endpoint,
+          batch,
+          p.fields
+        );
+
+        catSuccess += success;
+        catFailed  += failed;
+
+        if (batchErrors.length) {
+          allFails.push(
+            ...batchErrors.map((e) => ({
+              category: p.catLabel,
+              ...e,
+            }))
+          );
         }
 
         done += batch.length;
-        setUpState((prev) => ({ ...prev, done, pct: Math.round((done / total) * 100) }));
+        setUpState((prev) => ({
+          ...prev,
+          done,
+          pct: Math.round((done / total) * 100),
+        }));
       }
 
-      finals.push({ catLabel: p.catLabel, accent: p.accent, success, failed });
+      console.log(
+        `[Import] "${p.catLabel}" done — ✓ ${catSuccess} succeeded, ✗ ${catFailed} failed`
+      );
+      console.groupEnd();
+
+      finals.push({
+        catLabel: p.catLabel,
+        accent:   p.accent,
+        success:  catSuccess,
+        failed:   catFailed,
+      });
     }
 
     setResults(finals);
+    setFailLog(allFails);
     setStep("done");
+
     const ts = finals.reduce((s, r) => s + r.success, 0);
-    const tf = finals.reduce((s, r) => s + r.failed, 0);
+    const tf = finals.reduce((s, r) => s + r.failed,  0);
+
     if (ts > 0) { onUploaded(); toast.success(`${ts} records imported successfully!`); }
-    if (tf > 0) toast.error(`${tf} records failed to import.`);
+    if (tf > 0) toast.error(`${tf} records failed — see details below.`);
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -130,7 +245,10 @@ settled.forEach((r, i) => {
             Import Data
           </h3>
           {step !== "uploading" && (
-            <button onClick={onClose} className="text-slate-600 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+            <button
+              onClick={onClose}
+              className="text-slate-600 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
               </svg>
@@ -140,32 +258,46 @@ settled.forEach((r, i) => {
 
         <div className="px-6 py-5">
 
-          {/* STEP: choose */}
+          {/* ── STEP: choose ──────────────────────────────────────────────── */}
           {step === "choose" && (
             <div className="space-y-4">
-              <p className="text-slate-400 text-sm">Upload an Excel or CSV file. All sheets are auto-detected and categorised.</p>
+              <p className="text-slate-400 text-sm">
+                Upload an Excel or CSV file. All sheets are auto-detected and categorised.
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { l: "Excel / CSV",    i: "📊", d: ".xlsx, .xls, .csv" },
-                  { l: "Google Sheets",  i: "📋", d: "Export as .xlsx first" },
+                  { l: "Excel / CSV",   i: "📊", d: ".xlsx, .xls, .csv" },
+                  { l: "Google Sheets", i: "📋", d: "Export as .xlsx first" },
                 ].map((opt) => (
                   <button
                     key={opt.l}
                     onClick={() => fileRef.current?.click()}
-                    className="flex flex-col items-center gap-2 p-5 rounded-xl border border-slate-700/50 hover:border-indigo-500/40 bg-slate-800/30 hover:bg-slate-800/60 transition-all text-center">
+                    className="flex flex-col items-center gap-2 p-5 rounded-xl border border-slate-700/50 hover:border-indigo-500/40 bg-slate-800/30 hover:bg-slate-800/60 transition-all text-center"
+                  >
                     <span className="text-3xl">{opt.i}</span>
                     <span className="text-white text-sm font-semibold">{opt.l}</span>
                     <span className="text-slate-600 text-xs">{opt.d}</span>
                   </button>
                 ))}
               </div>
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleFile}
+              />
               <div className="bg-slate-800/30 rounded-xl p-3 border border-slate-700/30">
-                <p className="text-slate-600 text-xs font-semibold uppercase tracking-wider mb-2">Auto-detects:</p>
+                <p className="text-slate-600 text-xs font-semibold uppercase tracking-wider mb-2">
+                  Auto-detects:
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {CATEGORIES.map((c) => (
-                    <span key={c.id} className="text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={{ background: `${c.accent}15`, color: c.accent, border: `1px solid ${c.accent}25` }}>
+                    <span
+                      key={c.id}
+                      className="text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: `${c.accent}15`, color: c.accent, border: `1px solid ${c.accent}25` }}
+                    >
                       {c.label}
                     </span>
                   ))}
@@ -174,7 +306,7 @@ settled.forEach((r, i) => {
             </div>
           )}
 
-          {/* STEP: preview */}
+          {/* ── STEP: preview ─────────────────────────────────────────────── */}
           {step === "preview" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -183,14 +315,27 @@ settled.forEach((r, i) => {
               </div>
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {plan.map((p, idx) => (
-                  <div key={p.catId} className="rounded-xl border overflow-hidden"
-                    style={{ borderColor: p.checked ? `${p.accent}30` : "#1e293b" }}>
+                  <div
+                    key={p.catId}
+                    className="rounded-xl border overflow-hidden"
+                    style={{ borderColor: p.checked ? `${p.accent}30` : "#1e293b" }}
+                  >
                     <div
                       className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
                       style={{ background: p.checked ? `${p.accent}08` : "#0f172a" }}
-                      onClick={() => setPlan((prev) => prev.map((x, i) => i === idx ? { ...x, checked: !x.checked } : x))}>
-                      <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
-                        style={{ background: p.checked ? p.accent : "transparent", border: `1.5px solid ${p.checked ? p.accent : "#475569"}` }}>
+                      onClick={() =>
+                        setPlan((prev) =>
+                          prev.map((x, i) => (i === idx ? { ...x, checked: !x.checked } : x))
+                        )
+                      }
+                    >
+                      <div
+                        className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                        style={{
+                          background: p.checked ? p.accent : "transparent",
+                          border: `1.5px solid ${p.checked ? p.accent : "#475569"}`,
+                        }}
+                      >
                         {p.checked && (
                           <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#fff" strokeWidth={3}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
@@ -200,24 +345,35 @@ settled.forEach((r, i) => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-white text-sm font-semibold">{p.catLabel}</span>
-                          <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                            style={{ background: `${p.accent}20`, color: p.accent }}>
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                            style={{ background: `${p.accent}20`, color: p.accent }}
+                          >
                             {p.rows.length} records
                           </span>
                         </div>
-                        <p className="text-slate-700 text-xs truncate">from: {p.sheets.join(", ")}</p>
+                        <p className="text-slate-700 text-xs truncate">
+                          from: {p.sheets.join(", ")}
+                        </p>
                       </div>
                     </div>
+
                     {p.checked && (
                       <div className="border-t border-slate-800/30 divide-y divide-slate-800/20">
                         {p.rows.slice(0, 3).map((r, ri) => (
                           <div key={ri} className="px-4 py-1.5 flex gap-4 text-xs">
-                            <span className="text-white font-medium w-36 truncate shrink-0">{r.name}</span>
-                            <span className="text-slate-600 truncate">{r.email || r.phone || "—"}</span>
+                            <span className="text-white font-medium w-36 truncate shrink-0">
+                              {r.centreName || r.name || "—"}
+                            </span>
+                            <span className="text-slate-600 truncate">
+                              {r.email || r.phone || "—"}
+                            </span>
                           </div>
                         ))}
                         {p.rows.length > 3 && (
-                          <p className="px-4 py-1 text-xs text-slate-700">+{p.rows.length - 3} more</p>
+                          <p className="px-4 py-1 text-xs text-slate-700">
+                            +{p.rows.length - 3} more
+                          </p>
                         )}
                       </div>
                     )}
@@ -225,20 +381,28 @@ settled.forEach((r, i) => {
                 ))}
               </div>
               <div className="flex gap-3 pt-1">
-                <button onClick={() => setStep("choose")}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all">
+                <button
+                  onClick={() => setStep("choose")}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all"
+                >
                   Back
                 </button>
-                <button onClick={handleUpload} disabled={totalSel === 0}
+                <button
+                  onClick={handleUpload}
+                  disabled={totalSel === 0}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 transition-all hover:-translate-y-0.5"
-                  style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", boxShadow: "0 4px 15px rgba(99,102,241,0.2)" }}>
+                  style={{
+                    background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                    boxShadow: "0 4px 15px rgba(99,102,241,0.2)",
+                  }}
+                >
                   Import {totalSel} Records
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP: validation-error */}
+          {/* ── STEP: validation-error ────────────────────────────────────── */}
           {step === "validation-error" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
@@ -249,32 +413,40 @@ settled.forEach((r, i) => {
                 </div>
                 <div>
                   <p className="text-white font-bold text-sm">Validation Errors</p>
-                  <p className="text-slate-500 text-xs">Please fix the following errors before uploading</p>
+                  <p className="text-slate-500 text-xs">
+                    Please fix the following errors before uploading
+                  </p>
                 </div>
               </div>
               <div className="bg-slate-800/40 rounded-xl border border-red-500/20 max-h-52 overflow-y-auto divide-y divide-slate-800/30">
                 {valErrors.map((e, i) => (
                   <div key={i} className="px-4 py-2 text-xs text-red-400">{e}</div>
                 ))}
-                {valErrors.length === 10 && (
-                  <div className="px-4 py-2 text-xs text-slate-600">… and more errors. Please review the full file.</div>
+                {valErrors.length >= 20 && (
+                  <div className="px-4 py-2 text-xs text-slate-600">
+                    … and more errors. Please review the full file.
+                  </div>
                 )}
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setStep("preview")}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all">
+                <button
+                  onClick={() => setStep("preview")}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all"
+                >
                   Back to Preview
                 </button>
-                <button onClick={() => setStep("choose")}
+                <button
+                  onClick={() => setStep("choose")}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white"
-                  style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+                  style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}
+                >
                   Upload New File
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP: uploading */}
+          {/* ── STEP: uploading ───────────────────────────────────────────── */}
           {step === "uploading" && (
             <div className="py-1 space-y-5">
               <div className="flex items-center gap-4">
@@ -286,14 +458,22 @@ settled.forEach((r, i) => {
                   <p className="text-slate-600 text-xs mt-0.5">Do not close this window</p>
                 </div>
               </div>
+
               <div className="bg-slate-800/40 rounded-xl px-4 py-3 space-y-2 border border-slate-800">
-                {[["Category", upState.catLabel, false], ["Record", upState.record, true], ["Progress", `${upState.done} / ${upState.total}`, false]].map(([l, v, trunc]) => (
+                {[
+                  ["Category", upState.catLabel, false],
+                  ["Record",   upState.record,   true ],
+                  ["Progress", `${upState.done} / ${upState.total}`, false],
+                ].map(([l, v, trunc]) => (
                   <div key={l} className="flex items-center justify-between text-xs">
                     <span className="text-slate-600 font-semibold uppercase tracking-wide">{l}</span>
-                    <span className={`text-white font-medium ${trunc ? "truncate max-w-[200px]" : ""}`}>{v || "—"}</span>
+                    <span className={`text-white font-medium ${trunc ? "truncate max-w-[200px]" : ""}`}>
+                      {v || "—"}
+                    </span>
                   </div>
                 ))}
               </div>
+
               <div>
                 <div className="flex justify-between text-xs mb-2">
                   <span className="text-slate-600">Upload progress</span>
@@ -302,22 +482,41 @@ settled.forEach((r, i) => {
                 <div className="bg-slate-800/60 rounded-full h-3 overflow-hidden border border-slate-700/30">
                   <div
                     className="h-full rounded-full relative overflow-hidden transition-all duration-300"
-                    style={{ width: `${upState.pct}%`, background: "linear-gradient(90deg,#6366f1,#8b5cf6,#06b6d4)" }}>
+                    style={{
+                      width: `${upState.pct}%`,
+                      background: "linear-gradient(90deg,#6366f1,#8b5cf6,#06b6d4)",
+                    }}
+                  >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
                   </div>
                 </div>
               </div>
+
               <div className="space-y-1">
                 {plan.filter((p) => p.checked).map((p) => {
                   const isCur = p.catLabel === upState.catLabel;
                   return (
-                    <div key={p.catId}
+                    <div
+                      key={p.catId}
                       className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all"
-                      style={{ background: isCur ? `${p.accent}10` : "transparent", border: `1px solid ${isCur ? p.accent + "20" : "transparent"}` }}>
+                      style={{
+                        background: isCur ? `${p.accent}10` : "transparent",
+                        border:     `1px solid ${isCur ? p.accent + "20" : "transparent"}`,
+                      }}
+                    >
                       <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: isCur ? p.accent : "#374151" }} />
-                      <span className="text-sm font-medium" style={{ color: isCur ? p.accent : "#4b5563" }}>{p.catLabel}</span>
-                      <span className="text-xs ml-auto" style={{ color: isCur ? p.accent : "#374151" }}>{p.rows.length} records</span>
-                      {isCur && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" style={{ color: p.accent }} />}
+                      <span className="text-sm font-medium" style={{ color: isCur ? p.accent : "#4b5563" }}>
+                        {p.catLabel}
+                      </span>
+                      <span className="text-xs ml-auto" style={{ color: isCur ? p.accent : "#374151" }}>
+                        {p.rows.length} records
+                      </span>
+                      {isCur && (
+                        <div
+                          className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"
+                          style={{ color: p.accent }}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -325,7 +524,7 @@ settled.forEach((r, i) => {
             </div>
           )}
 
-          {/* STEP: done */}
+          {/* ── STEP: done ────────────────────────────────────────────────── */}
           {step === "done" && (
             <div className="py-1 space-y-4">
               <div className="text-center">
@@ -339,9 +538,13 @@ settled.forEach((r, i) => {
                   {results.reduce((s, r) => s + r.success, 0)} records added successfully
                 </p>
               </div>
+
               <div className="space-y-2">
                 {results.map((r) => (
-                  <div key={r.catLabel} className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/30">
+                  <div
+                    key={r.catLabel}
+                    className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/30"
+                  >
                     <span className="text-white text-sm font-medium">{r.catLabel}</span>
                     <div className="flex items-center gap-3 text-xs font-semibold">
                       {r.success > 0 && <span className="text-emerald-400">✓ {r.success} added</span>}
@@ -350,8 +553,40 @@ settled.forEach((r, i) => {
                   </div>
                 ))}
               </div>
-              <button onClick={onClose} className="w-full py-2.5 rounded-lg text-sm font-semibold text-white"
-                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+
+              {/* Failure details (collapsible) */}
+              {failLog.length > 0 && (
+                <details className="group">
+                  <summary className="text-xs text-red-400 cursor-pointer select-none flex items-center gap-1.5 py-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                      className="transition-transform group-open:rotate-90">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    Show {failLog.length} failure detail{failLog.length > 1 ? "s" : ""}
+                    <span className="text-slate-600 ml-1">(also visible in browser console)</span>
+                  </summary>
+                  <div className="mt-2 bg-slate-800/40 rounded-xl border border-red-500/20 max-h-40 overflow-y-auto divide-y divide-slate-800/30">
+                    {failLog.map((f, i) => (
+                      <div key={i} className="px-3 py-2 text-xs">
+                        <span className="text-red-400 font-semibold">{f.category}</span>
+                        <span className="text-slate-500 mx-1">·</span>
+                        <span className="text-slate-400">{f.row?.centreName || f.row?.name || `Row ${f.rowIndex + 1}`}</span>
+                        <span className="text-slate-500 mx-1">—</span>
+                        <span className="text-red-300">{f.message}</span>
+                        {f.status && (
+                          <span className="ml-1 text-slate-600">[HTTP {f.status}]</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              <button
+                onClick={onClose}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold text-white"
+                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}
+              >
                 Done
               </button>
             </div>

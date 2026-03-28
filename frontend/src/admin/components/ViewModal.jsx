@@ -2,43 +2,162 @@
 import { fmtDate } from "../helpers.js";
 import { StatusBadge, TypeBadge } from "./ui.jsx";
 
-// Pretty label map so raw keys look nice
 const LABEL_MAP = {
-  _id:             "Record ID",
-  centreName:      "Centre Name",
-  centreType:      "Centre Type",
-  name:            "Name",
-  phone:           "Phone",
-  email:           "Email",
-  website:         "Website",
-  address:         "Address",
-  city:            "City",
-  district:        "District",
-  state:           "State",
-  pincode:         "Pincode",
-  onboardedBy:     "Onboarded By",
-  area_of_interest:"Area of Interest",
-  volunteer_type:  "Volunteer Type",
-  remarks:         "Remarks",
-  status:          "Status",
-  follow_up_date:  "Follow-up Date",
-  createdAt:       "Registered On",
-  updatedAt:       "Last Updated",
-  contacts:        "Contact Persons",
+  _id:              "Record ID",
+  centreName:       "Centre Name",
+  centreType:       "Centre Type",
+  name:             "Name",
+  phone:            "Phone",
+  email:            "Email",
+  website:          "Website",
+  address:          "Address",
+  city:             "City",
+  district:         "District",
+  state:            "State",
+  pincode:          "Pincode",
+  onboardedBy:      "Onboarded By",
+  ninAin:           "NIN / AIN",
+  area_of_interest: "Area of Interest",
+  volunteer_type:   "Volunteer Type",
+  remarks:          "Remarks",
+  status:           "Status",
+  follow_up_date:   "Follow-up Date",
+  createdAt:        "Registered On",
+  updatedAt:        "Last Updated",
+  contacts:         "Contact Persons",
 };
 
-// Fields to always show (in this order) for each category
 const VIEW_FIELDS = {
   organisation: [
-    "centreName","centreType","website","address","city","district","state","pincode",
-    "onboardedBy","contacts","status","createdAt","_id",
+    "centreName","centreType","website",
+    "address","city","district","state","pincode",
+    "onboardedBy","ninAin",
+    "contacts",
+    "status","createdAt","_id",
   ],
   volunteer: [
-    "name","phone","email","website","address","city","district","state",
-    "area_of_interest","volunteer_type","remarks","status","follow_up_date","createdAt","_id",
+    "name","phone","email","website",
+    "address","city","district","state",
+    "area_of_interest","volunteer_type","remarks",
+    "status","follow_up_date","createdAt","_id",
   ],
 };
 
+function InteractionModeIcon({ mode }) {
+  const icons = {
+    Email: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+      </svg>
+    ),
+    Phone: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.387a12.035 12.035 0 01-7.143-7.143c-.155-.441.011-.928.387-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/>
+      </svg>
+    ),
+    WhatsApp: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/>
+      </svg>
+    ),
+    Visit: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
+      </svg>
+    ),
+  };
+  return icons[mode] || null;
+}
+
+// ── Interaction block — two sections: Current + Next ──────────────────────────
+function InteractionBlock({ interaction, accent }) {
+  if (!interaction) return null;
+
+  const {
+    interactionBy, interactedWith, interactionDate,
+    interactionMode, notes, ninAin, nextInteractionDate,
+  } = interaction;
+
+  return (
+    <div className="space-y-3 w-full">
+
+      {/* ── CURRENT INTERACTION ── */}
+      <div className="p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl space-y-2.5">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+          Current Interaction
+        </p>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+          {interactionBy && (
+            <div>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">Interaction By</p>
+              <p className="text-white font-medium">{interactionBy}</p>
+            </div>
+          )}
+          {interactedWith && (
+            <div>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">Interacted With</p>
+              <p className="text-white font-medium">{interactedWith}</p>
+            </div>
+          )}
+          {interactionDate && (
+            <div>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">Interaction Date</p>
+              <p className="text-white font-medium">{fmtDate(interactionDate)}</p>
+            </div>
+          )}
+          {ninAin && (
+            <div>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">NIN / AIN</p>
+              <p className="text-white font-medium font-mono">{ninAin}</p>
+            </div>
+          )}
+        </div>
+
+        {notes && (
+          <div className="pt-2 border-t border-slate-700/40">
+            <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-1">Notes</p>
+            <p className="text-slate-300 text-xs leading-relaxed">{notes}</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── NEXT INTERACTION ── */}
+      <div className="p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl space-y-2.5">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+          Next Interaction Planned
+        </p>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+          {nextInteractionDate ? (
+            <div>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">Planned Date</p>
+              <p className="font-semibold" style={{ color: accent }}>{fmtDate(nextInteractionDate)}</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">Planned Date</p>
+              <p className="text-slate-600 text-xs italic">Not set</p>
+            </div>
+          )}
+          {interactionMode && (
+            <div>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">Mode</p>
+              <p className="text-white font-medium flex items-center gap-1">
+                <InteractionModeIcon mode={interactionMode} />
+                {interactionMode}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+// ── Main ViewModal ────────────────────────────────────────────────────────────
 export default function ViewModal({ isOpen, onClose, record, category, onEdit, onDelete }) {
   if (!isOpen || !record) return null;
 
@@ -50,7 +169,7 @@ export default function ViewModal({ isOpen, onClose, record, category, onEdit, o
     if (key === "_id")
       return <span className="font-mono text-xs text-slate-500 break-all">{val}</span>;
 
-    if (key === "createdAt" || key === "updatedAt" || key === "follow_up_date")
+    if (["createdAt","updatedAt","follow_up_date"].includes(key))
       return <span className="text-white text-sm">{fmtDate(val)}</span>;
 
     if (key === "status")
@@ -71,16 +190,20 @@ export default function ViewModal({ isOpen, onClose, record, category, onEdit, o
         </a>
       );
 
+    if (key === "ninAin")
+      return <span className="text-white text-sm font-mono">{val}</span>;
+
     if (key === "contacts" && Array.isArray(val)) {
-      if (val.length === 0) return <span className="text-slate-600 text-xs italic">No contacts</span>;
+      if (val.length === 0)
+        return <span className="text-slate-600 text-xs italic">No contacts</span>;
       return (
         <div className="space-y-3 w-full">
           {val.map((c, i) => (
             <div
               key={i}
-              className="p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl space-y-1 shadow-sm"
+              className="p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl shadow-sm"
             >
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                   Contact #{i + 1}
                 </span>
@@ -95,8 +218,8 @@ export default function ViewModal({ isOpen, onClose, record, category, onEdit, o
                   {c.designation}
                 </span>
               </div>
-              <p className="text-sm font-bold text-white">{c.name}</p>
-              <div className="flex flex-col gap-0.5 mt-1">
+              <p className="text-sm font-bold text-white mb-1.5">{c.name}</p>
+              <div className="flex flex-col gap-1">
                 <p className="text-xs text-slate-400 flex items-center gap-1.5">
                   <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.387a12.035 12.035 0 01-7.143-7.143c-.155-.441.011-.928.387-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/>
@@ -118,6 +241,8 @@ export default function ViewModal({ isOpen, onClose, record, category, onEdit, o
 
     return <span className="text-white text-sm">{String(val)}</span>;
   };
+
+  const hasInteraction = category.id === "organisation" && record.interaction;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -152,6 +277,7 @@ export default function ViewModal({ isOpen, onClose, record, category, onEdit, o
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-3">
+
           {/* Location pill row */}
           <div className="flex flex-wrap gap-2 pb-2 border-b border-slate-800/50">
             {[record.city, record.district, record.state, record.pincode].filter(Boolean).map((v, i) => (
@@ -169,7 +295,7 @@ export default function ViewModal({ isOpen, onClose, record, category, onEdit, o
             ))}
           </div>
 
-          {/* Fields */}
+          {/* Standard fields */}
           {fieldOrder.map((k) => {
             const val = record[k];
             const rendered = renderValue(k, val);
@@ -191,6 +317,21 @@ export default function ViewModal({ isOpen, onClose, record, category, onEdit, o
               </div>
             );
           })}
+
+          {/* Interaction Remarks section */}
+          {hasInteraction && (
+            <div className="pt-3 border-t border-slate-800/50">
+              <div className="flex flex-col gap-2">
+                <span className="text-slate-600 text-xs font-semibold uppercase tracking-wide">
+                  Interaction Remarks
+                </span>
+                <InteractionBlock
+                  interaction={record.interaction}
+                  accent={category.accent}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

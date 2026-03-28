@@ -41,9 +41,7 @@ const bulkInsert = async (Model, records) => {
   }
 };
 
-/**
- * POST /organisations/volunteers
- */
+// ── POST /organisations/volunteers ────────────────────────────────────────────
 export const createVolunteer = asyncHandler(async (req, res) => {
   const {
     name, phone, email, website,
@@ -79,9 +77,7 @@ export const createVolunteer = asyncHandler(async (req, res) => {
   }
 });
 
-/**
- * POST /organisations/volunteers/bulk
- */
+// ── POST /organisations/volunteers/bulk ───────────────────────────────────────
 export const bulkCreateVolunteers = asyncHandler(async (req, res) => {
   const { records } = req.body;
 
@@ -111,9 +107,7 @@ export const bulkCreateVolunteers = asyncHandler(async (req, res) => {
   return sendSuccess(res, 201, "Bulk import completed.", { inserted, failed, total: records.length });
 });
 
-/**
- * GET /organisations/volunteers
- */
+// ── GET /organisations/volunteers ─────────────────────────────────────────────
 export const getAllVolunteers = asyncHandler(async (req, res) => {
   const {
     page = 1, limit = 12,
@@ -122,11 +116,8 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
     status, state, district, area_of_interest,
   } = req.query;
 
-  // ── Base query (date filter) ──────────────────────────────────────────────
   const query = { ...buildDateFilter(dateFrom, dateTo) };
 
-  // ── Multi-field regex search ──────────────────────────────────────────────
-  // Koi bhi field mein match kare to result aayega
   if (search && search.trim()) {
     const regex = { $regex: search.trim(), $options: "i" };
     query.$or = [
@@ -142,7 +133,6 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
     ];
   }
 
-  // ── Exact filters (dropdown se aate hain) ────────────────────────────────
   if (status)           query.status           = status;
   if (state)            query.state            = state;
   if (district)         query.district         = district;
@@ -166,9 +156,7 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * GET /organisations/volunteers/:id
- */
+// ── GET /organisations/volunteers/:id ─────────────────────────────────────────
 export const getVolunteerById = asyncHandler(async (req, res) => {
   const volunteer = await Volunteer.findById(req.params.id)
     .populate("registered_by", "fullName email");
@@ -176,9 +164,7 @@ export const getVolunteerById = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Volunteer retrieved successfully.", { volunteer });
 });
 
-/**
- * PUT /organisations/volunteers/:id
- */
+// ── PUT /organisations/volunteers/:id ─────────────────────────────────────────
 export const updateVolunteer = asyncHandler(async (req, res) => {
   const allowed = [
     "name", "phone", "email", "website", "address",
@@ -190,7 +176,9 @@ export const updateVolunteer = asyncHandler(async (req, res) => {
 
   try {
     const volunteer = await Volunteer.findByIdAndUpdate(
-      req.params.id, updates, { new: true, runValidators: true }
+      req.params.id,
+      { $set: updates },
+      { new: true, runValidators: true, context: "query" }
     );
     if (!volunteer) return sendError(res, 404, "Volunteer not found.");
     return sendSuccess(res, 200, "Volunteer updated successfully.", { volunteer });
@@ -201,9 +189,7 @@ export const updateVolunteer = asyncHandler(async (req, res) => {
   }
 });
 
-/**
- * DELETE /organisations/volunteers/:id
- */
+// ── DELETE /organisations/volunteers/:id ──────────────────────────────────────
 export const deleteVolunteer = asyncHandler(async (req, res) => {
   const volunteer = await Volunteer.findByIdAndDelete(req.params.id);
   if (!volunteer) return sendError(res, 404, "Volunteer not found.");
