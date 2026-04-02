@@ -109,7 +109,7 @@ function InteractionBlock({ interaction, accent }) {
           )}
           {ninAin && (
             <div>
-              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">NIN / AIN</p>
+              <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">AIN / NIN Number</p>
               <p className="text-white font-medium font-mono">{ninAin}</p>
             </div>
           )}
