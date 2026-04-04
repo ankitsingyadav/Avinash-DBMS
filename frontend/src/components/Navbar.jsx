@@ -21,8 +21,8 @@ export default function Navbar() {
   const navLinks = [
     { label: "Home", to: "/" },
     { label: "About", to: "/about" },
+    { label: "Organisation", to: "/organisation", badge: null },
     ...(isAdmin ? [
-      { label: "Organisation", to: "/organisation", badge: null },
       { label: "Admin", to: "/admin", badge: "ADMIN" },
     ] : []),
   ];
@@ -154,10 +154,7 @@ export default function Navbar() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                       </svg>
                       My Profile
-                    </Link>
-
-                    {/* Organisation — sirf admin */}
-                    {isAdmin && (
+                    </Link>               
                       <Link
                         to="/organisation"
                         onClick={() => setProfileOpen(false)}
@@ -168,8 +165,6 @@ export default function Navbar() {
                         </svg>
                         Organisation
                       </Link>
-                    )}
-
                     {/* Dashboard — sirf admin */}
                     {isAdmin && (
                       <Link
@@ -183,8 +178,6 @@ export default function Navbar() {
                         Dashboard
                       </Link>
                     )}
-
-                    {/* Admin Panel — sirf admin */}
                     {isAdmin && (
                       <Link
                         to="/admin"
@@ -198,8 +191,6 @@ export default function Navbar() {
                       </Link>
                     )}
                   </div>
-
-                  {/* Logout */}
                   <div className="border-t border-slate-800/60 py-1.5">
                     <button
                       onClick={handleLogout}
@@ -215,7 +206,6 @@ export default function Navbar() {
               )}
             </div>
           ) : (
-            /* Not logged in */
             <div className="flex items-center gap-2">
               <Link
                 to="/login"

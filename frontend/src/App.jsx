@@ -112,14 +112,14 @@ export default function App() {
             element={<AdminOnly><AdminPage /></AdminOnly>}
           />
           <Route path="/organisation"
-            element={<AdminOnly><OrganisationPage /></AdminOnly>}
-          />
-          <Route path="/organisation/add"
-            element={<AdminOnly><OrganisationFormPage /></AdminOnly>}
-          />
-          <Route path="/organisation/volunteer"
-            element={<AdminOnly><VolunteerFormPage /></AdminOnly>}
-          />
+  element={<ProtectedRoute><OrganisationPage /></ProtectedRoute>}
+/>
+<Route path="/organisation/add"
+  element={<AdminOnly><OrganisationFormPage /></AdminOnly>}
+/>
+<Route path="/organisation/volunteer"
+  element={<AdminOnly><VolunteerFormPage /></AdminOnly>}
+/>
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
