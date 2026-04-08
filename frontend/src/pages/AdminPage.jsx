@@ -17,8 +17,9 @@ import EditModal          from "../admin/components/EditModal.jsx";
 import ViewModal          from "../admin/components/ViewModal.jsx";
 import ImportModal        from "../admin/components/ImportModal.jsx";
 import DataTable          from "../admin/components/DataTable.jsx";
+import useAuthStore       from "../context/authStore.js";
 
-const CATS = CATEGORIES.map((c) => ({ ...c, icon: CATEGORY_ICONS[c.id] }));
+const ALL_CATS = CATEGORIES.map((c) => ({ ...c, icon: CATEGORY_ICONS[c.id] }));
 
 // ── URL ↔ state helpers ───────────────────────────────────────────────────────
 function readParams(params, category) {
@@ -43,6 +44,24 @@ export default function AdminPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location  = useLocation();
   const navigate  = useNavigate();
+
+  // ── Permission helpers ─────────────────────────────────────────────────────
+  const { canAccess, canDo, isFieldHidden, isFullAdmin, user: authUser } = useAuthStore();
+
+  // Filter available tabs to only modules this user can access
+  const CATS = useMemo(() => {
+    return ALL_CATS.filter((c) => canAccess(c.id));
+  }, [authUser]); // eslint-disable-line
+
+  const canAdd    = canDo("add");
+  const canEdit   = canDo("edit");
+  const canDelete = canDo("delete");
+  const canImport = isFullAdmin();
+
+  // Filter columns for sensitive fields that are hidden from this user
+  const getVisibleColumns = useCallback((category) => {
+    return (category?.columns ?? []).filter((col) => !isFieldHidden(col.key));
+  }, [authUser]); // eslint-disable-line
 
   // ── Derive initial state from URL ─────────────────────────────────────────
   const initialCat = useMemo(
@@ -268,29 +287,33 @@ export default function AdminPage() {
             <h1 className="text-2xl font-bold text-white">Dashboard</h1>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                if (activeTab === "organisation") navigate("/organisation/add");
-                else setEditRecord({});
-              }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5 shadow-lg shadow-indigo-500/20"
-              style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
-              </svg>
-              Add New
-            </button>
-            <button
-              onClick={() => setShowImport(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
-              style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", boxShadow: "0 4px 20px rgba(99,102,241,0.22)" }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-              </svg>
-              Import Data
-            </button>
+            {canAdd && (
+              <button
+                onClick={() => {
+                  if (activeTab === "organisation") navigate("/organisation/add");
+                  else setEditRecord({});
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5 shadow-lg shadow-indigo-500/20"
+                style={{ background: "linear-gradient(135deg,#4f46e5,#6366f1)" }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                Add New
+              </button>
+            )}
+            {canImport && (
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
+                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", boxShadow: "0 4px 20px rgba(99,102,241,0.22)" }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+                Import Data
+              </button>
+            )}
           </div>
         </div>
 
@@ -491,11 +514,14 @@ export default function AdminPage() {
 
         {/* Data table */}
         <DataTable
-          category={category} data={data} loading={loading} search={search}
+          category={{ ...category, columns: getVisibleColumns(category) }}
+          data={data} loading={loading} search={search}
           page={page} pages={pages} total={total}
           sortField={sortField} sortDir={sortDir} onSort={handleSort}
           selectedIds={selectedIds} onToggleAll={handleToggleAll} onToggleRow={handleToggleRow}
-          onView={setViewRecord} onEdit={setEditRecord} onDelete={setDeleteRecord}
+          onView={setViewRecord}
+          onEdit={canEdit ? setEditRecord : null}
+          onDelete={canDelete ? setDeleteRecord : null}
           onPageChange={setPage}
         />
 

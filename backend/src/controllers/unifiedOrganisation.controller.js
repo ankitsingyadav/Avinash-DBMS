@@ -2,6 +2,11 @@
 import Organisation from "../models/organisation.model.js";
 import Volunteer from "../models/volunteer.model.js";
 import { asyncHandler, sendSuccess, sendError } from "../utils/response.utils.js";
+import {
+  getHiddenFields,
+  stripHiddenFields,
+  verifyOwnRecord,
+} from "../middleware/permission.middleware.js";
 
 const BULK_LIMIT = 500;
 
@@ -13,8 +18,6 @@ const buildSort = (sortField = "createdAt", sortDir = "desc") => {
   const field = SORT_WHITELIST.has(sortField) ? sortField : "createdAt";
   return { [field]: sortDir === "asc" ? 1 : -1 };
 };
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
 
 const normaliseWebsite = (v) => {
   const s = String(v || "").trim();
@@ -52,6 +55,15 @@ export const createOrganisation = asyncHandler(async (req, res) => {
 
   if (!Array.isArray(contacts) || contacts.length === 0)
     return sendError(res, 422, "Contacts must be a non-empty array.");
+
+  // ── partial_admin module access check ─────────────────────────────────────
+  if (req.user.role === "partial_admin") {
+    const mods = req.user.permissions?.allowedModules ?? [];
+    const hasAccess = mods.includes("organisation") || mods.includes(centreType);
+    if (!hasAccess) {
+      return sendError(res, 403, `You do not have access to create records for '${centreType}'.`);
+    }
+  }
 
   const finalDistrict = district && String(district).trim()
     ? String(district).trim()
@@ -216,11 +228,24 @@ export const getOrganisationById = asyncHandler(async (req, res) => {
   const organisation = await Organisation.findById(req.params.id)
     .populate("registeredBy", "fullName email");
   if (!organisation) return sendError(res, 404, "Organisation not found.");
-  return sendSuccess(res, 200, "Organisation retrieved successfully.", { organisation });
+
+  const hidden = getHiddenFields(req);
+  const safeOrg = stripHiddenFields(organisation.toObject(), hidden);
+
+  return sendSuccess(res, 200, "Organisation retrieved successfully.", { organisation: safeOrg });
 });
 
 // ── PUT /api/v1/organisations/:id ─────────────────────────────────────────────
 export const updateOrganisation = asyncHandler(async (req, res) => {
+  // data_entry: can only edit own records
+  if (req.user.role === "data_entry") {
+    const existing = await Organisation.findById(req.params.id).lean();
+    if (!existing) return sendError(res, 404, "Organisation not found.");
+    if (!verifyOwnRecord(existing, req.user._id)) {
+      return sendError(res, 403, "You can only edit records you created.");
+    }
+  }
+
   const allowed = [
     "centreType", "centreName", "website", "address",
     "city", "district", "state", "pincode",
@@ -235,8 +260,6 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
   if (updates.website) updates.website = normaliseWebsite(updates.website);
 
   try {
-    // $set ensures Mongoose treats this as a partial update (not a replacement)
-    // context: "query" is required for runValidators to work correctly on updates
     const organisation = await Organisation.findByIdAndUpdate(
       req.params.id,
       { $set: updates },
@@ -253,6 +276,15 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
 
 // ── DELETE /api/v1/organisations/:id ─────────────────────────────────────────
 export const deleteOrganisation = asyncHandler(async (req, res) => {
+  // data_entry: can only delete own records
+  if (req.user.role === "data_entry") {
+    const existing = await Organisation.findById(req.params.id).lean();
+    if (!existing) return sendError(res, 404, "Organisation not found.");
+    if (!verifyOwnRecord(existing, req.user._id)) {
+      return sendError(res, 403, "You can only delete records you created.");
+    }
+  }
+
   const organisation = await Organisation.findByIdAndDelete(req.params.id);
   if (!organisation) return sendError(res, 404, "Organisation not found.");
   return sendSuccess(res, 200, "Organisation deleted successfully.");
@@ -266,7 +298,23 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
     status, state, district, city, centreType,
   } = req.query;
 
-  const query = {};
+  // ── Permission scoping ──────────────────────────────────────────────────────
+  const dataScope = req._dataScope || {};
+  const dateScope = req._dateScope || {};
+
+  const query = { ...dataScope, ...dateScope };
+
+  // partial_admin: if allowedModules has specific centreTypes (e.g. ["School","NGO"]),
+  // scope the query to only those types
+  if (req.user.role === "partial_admin") {
+    const mods = req.user.permissions?.allowedModules ?? [];
+    const centreTypes = mods.filter((m) =>
+      ["School", "College", "NGO", "Corporate", "Online", "Community Centre"].includes(m)
+    );
+    if (centreTypes.length > 0) {
+      query.centreType = { $in: centreTypes };
+    }
+  }
 
   if (search && search.trim()) {
     const regex     = { $regex: search.trim(), $options: "i" };
@@ -292,7 +340,8 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
   if (state)      query.state      = state;
   if (district)   query.district   = district;
   if (city)       query.city       = city;
-  if (centreType) query.centreType = centreType;
+  // Only apply centreType param if partial_admin hasn't already scoped it
+  if (centreType && !query.centreType) query.centreType = centreType;
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -305,8 +354,11 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
     Organisation.countDocuments(query),
   ]);
 
+  const hidden = getHiddenFields(req);
+  const safeOrgs = stripHiddenFields(organisations, hidden);
+
   return sendSuccess(res, 200, "Organisations retrieved successfully.", {
-    organisations,
+    organisations: safeOrgs,
     total,
     page:  parseInt(page),
     pages: Math.ceil(total / parseInt(limit)),

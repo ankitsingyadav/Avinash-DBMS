@@ -29,7 +29,6 @@ const userSchema = new mongoose.Schema(
       trim: true,
       validate: {
         validator: function (v) {
-          // Supports Indian and international formats
           return /^(\+\d{1,3}[- ]?)?\d{10,15}$/.test(v);
         },
         message: "Please provide a valid phone number",
@@ -40,7 +39,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, "Password is required"],
       minlength: [8, "Password must be at least 8 characters"],
-      select: false, // Never return password in queries
+      select: false,
     },
 
     age: {
@@ -50,96 +49,108 @@ const userSchema = new mongoose.Schema(
       max: [120, "Please provide a valid age"],
     },
 
+    // ── Roles: user | admin (legacy) | full_admin | partial_admin | data_entry
     role: {
       type: String,
-      enum: ["user", "admin"],
+      enum: ["user", "admin", "full_admin", "partial_admin", "data_entry"],
       default: "user",
     },
 
+    // ── Access Control Permissions ──────────────────────────────────────────
+    permissions: {
+      // Modules the user can access: "volunteer" | "organisation"
+      // For partial_admin, can also scope to centreTypes: "School","NGO" etc.
+      allowedModules: {
+        type: [String],
+        default: [],
+      },
+      // CRUD actions allowed: view | add | edit | delete
+      allowedActions: {
+        type: [String],
+        enum: ["view", "add", "edit", "delete"],
+        default: [],
+      },
+      // Fields hidden from responses: "phone" | "email"
+      hiddenFields: {
+        type: [String],
+        default: [],
+      },
+      // Date-range restriction — user only sees records created in this window
+      dateFrom: {
+        type: Date,
+        default: null,
+      },
+      dateTo: {
+        type: Date,
+        default: null,
+      },
+    },
+
     profileImage: {
-      public_id: {
-        type: String,
-        default: null,
-      },
-      url: {
-        type: String,
-        default: null,
-      },
+      public_id: { type: String, default: null },
+      url:       { type: String, default: null },
     },
 
-    isEmailVerified: {
-      type: Boolean,
-      default: false,
-    },
+    isEmailVerified: { type: Boolean, default: false },
+    isActive:        { type: Boolean, default: true  },
 
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-
-    // Password reset fields
-    passwordResetToken: String,
+    // Password reset
+    passwordResetToken:   String,
     passwordResetExpires: Date,
 
-    // For tracking last login
-    lastLogin: {
-      type: Date,
-      default: null,
-    },
+    lastLogin: { type: Date, default: null },
 
-    // Refresh token for JWT rotation
-    refreshToken: {
-      type: String,
-      select: false,
-    },
+    refreshToken: { type: String, select: false },
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
+    toJSON:   { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// ─── Indexes ────────────────────────────────────────────────────────────────
-// email aur phone ke indexes unique:true se automatically ban jaate hain
-// isliye yahan dobara likhne ki zaroorat nahi — warnings fix ho jayengi
+// ─── Indexes ─────────────────────────────────────────────────────────────────
 userSchema.index({ role: 1 });
 userSchema.index({ passwordResetToken: 1 }, { sparse: true });
 
-// ─── Pre-save: Hash password ─────────────────────────────────────────────────
 // ─── Pre-save: Hash password ─────────────────────────────────────────────────
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
 });
-// ─── Instance Methods ────────────────────────────────────────────────────────
 
-// Compare entered password with hashed
+// ─── Instance Methods ─────────────────────────────────────────────────────────
+
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Generate password reset token (stored as hash in DB)
 userSchema.methods.createPasswordResetToken = function () {
   const resetToken = crypto.randomBytes(32).toString("hex");
-
-  // Store hashed version in DB
-  this.passwordResetToken = crypto
-    .createHash("sha256")
-    .update(resetToken)
-    .digest("hex");
-
-  this.passwordResetExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
-
-  // Return raw token (sent via email)
+  this.passwordResetToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+  this.passwordResetExpires = Date.now() + 15 * 60 * 1000;
   return resetToken;
 };
 
-// Virtual: profile image URL with fallback
+// True for "admin" (legacy) and "full_admin"
+userSchema.methods.isFullAdmin = function () {
+  return this.role === "full_admin" || this.role === "admin";
+};
+
+userSchema.methods.canAccessModule = function (module) {
+  if (this.isFullAdmin()) return true;
+  return (this.permissions?.allowedModules ?? []).includes(module);
+};
+
+userSchema.methods.canPerformAction = function (action) {
+  if (this.isFullAdmin()) return true;
+  return (this.permissions?.allowedActions ?? []).includes(action);
+};
+
+// ─── Virtual: avatar ─────────────────────────────────────────────────────────
 userSchema.virtual("avatar").get(function () {
   if (this.profileImage?.url) return this.profileImage.url;
-  // Initials-based avatar fallback
   const initials = this.fullName
     .split(" ")
     .map((n) => n[0])

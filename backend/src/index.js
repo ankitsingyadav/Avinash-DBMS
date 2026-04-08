@@ -9,6 +9,7 @@ import mongoose from "mongoose";
 import connectDB from "./lib/db.js";
 import authRoutes from "./routes/auth.routes.js";
 import organisationRoutes from "./routes/organisation.routes.js";
+import userManagementRoutes from "./routes/userManagement.routes.js";
 import errorHandler from "./middleware/error.middleware.js";
 
 const app = express();
@@ -33,8 +34,9 @@ app.get("/health", (req, res) => {
   res.status(200).json({ success: true, status: "ok", environment: process.env.NODE_ENV, timestamp: new Date().toISOString() });
 });
 
-app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/auth",          authRoutes);
 app.use("/api/v1/organisations", organisationRoutes);
+app.use("/api/v1/users",         userManagementRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found.` });
@@ -46,9 +48,6 @@ const startServer = async () => {
 
   app.listen(PORT, () => {
     console.log(`\nServer running at http://localhost:${PORT}`);
-    // console.log(`Environment: ${process.env.NODE_ENV}`);
-    // console.log(`API Base: http://localhost:${PORT}/api/v1`);
-    // console.log(`Health: http://localhost:${PORT}/health\n`);
   });
 };
 

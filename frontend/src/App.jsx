@@ -19,6 +19,7 @@ const AdminPage            = lazy(() => import("./pages/AdminPage"));
 const OrganisationPage     = lazy(() => import("./pages/OrganisationPage"));
 const VolunteerFormPage    = lazy(() => import("./pages/VolunteerFormPage"));
 const OrganisationFormPage = lazy(() => import("./pages/OrganisationFormPage"));
+const AccessControlPage    = lazy(() => import("./pages/AccessControlPage"));
 
 // ── Page loader (Suspense fallback - pehli baar load ke liye) ─
 function PageLoader() {
@@ -47,12 +48,24 @@ function PageLoader() {
   );
 }
 
-// ── Admin Only Guard ──────────────────────────────────────────
+// ── Admin-tier guard: all admin roles can access the panel ────
+// The panel itself filters what each role sees via permissions.
 const AdminOnly = ({ children }) => {
+  const { user } = useAuthStore();
+  const adminRoles = ["admin", "full_admin", "partial_admin", "data_entry"];
+  return (
+    <ProtectedRoute>
+      {adminRoles.includes(user?.role) ? children : <Navigate to="/" replace />}
+    </ProtectedRoute>
+  );
+};
+
+// ── Full Admin only guard ─────────────────────────────────────
+const FullAdminOnly = ({ children }) => {
   const { user } = useAuthStore();
   return (
     <ProtectedRoute>
-      {user?.role === "admin" ? children : <Navigate to="/" replace />}
+      {(user?.role === "admin" || user?.role === "full_admin") ? children : <Navigate to="/" replace />}
     </ProtectedRoute>
   );
 };
@@ -119,6 +132,9 @@ export default function App() {
 />
 <Route path="/organisation/volunteer"
   element={<AdminOnly><VolunteerFormPage /></AdminOnly>}
+/>
+<Route path="/access-control"
+  element={<FullAdminOnly><AccessControlPage /></FullAdminOnly>}
 />
 
           <Route path="*" element={<Navigate to="/" replace />} />

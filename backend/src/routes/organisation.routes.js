@@ -21,41 +21,114 @@ import {
   getVolunteerDistrictsByState,
 } from "../controllers/unifiedOrganisation.controller.js";
 
-import { protect, restrictTo } from "../middleware/auth.middleware.js";
+import { protect } from "../middleware/auth.middleware.js";
+import {
+  requireRole,
+  checkModuleAccess,
+  checkActionAccess,
+  applyDataScope,
+  applyDateRangeScope,
+} from "../middleware/permission.middleware.js";
 
 const router = express.Router();
 
+// All routes require authentication
 router.use(protect);
+
+// Apply data + date scope on every request (middleware reads role internally)
+router.use(applyDataScope);
+router.use(applyDateRangeScope);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IMPORTANT: All literal/static sub-paths MUST come before "/:id" routes.
-// Order matters in Express — if /:id is registered first, "bulk" and "meta"
-// will be treated as MongoDB IDs and cause 500 errors.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Meta ──────────────────────────────────────────────────────────────────────
-router.get("/meta/districts",            getDistrictsByState);           // GET /organisations/meta/districts?state=X
-router.get("/volunteers/meta/districts", getVolunteerDistrictsByState);  // GET /organisations/volunteers/meta/districts?state=X
+router.get("/meta/districts",            getDistrictsByState);
+router.get("/volunteers/meta/districts", getVolunteerDistrictsByState);
 
 // ── Volunteers ────────────────────────────────────────────────────────────────
-router.post  ("/volunteers/bulk", restrictTo("admin"), bulkCreateVolunteers);
-router.route ("/volunteers")
-  .get  (getAllVolunteers)
-  .post (restrictTo("admin"), createVolunteer);
-router.route ("/volunteers/:id")
-  .get    (getVolunteerById)
-  .put    (restrictTo("admin"), updateVolunteer)
-  .delete (restrictTo("admin"), deleteVolunteer);
+
+// Bulk import — full_admin only
+router.post(
+  "/volunteers/bulk",
+  requireRole("admin", "full_admin"),
+  checkModuleAccess("volunteer"),
+  checkActionAccess("add"),
+  bulkCreateVolunteers
+);
+
+// List + create
+router.route("/volunteers")
+  .get(
+    checkModuleAccess("volunteer"),
+    checkActionAccess("view"),
+    getAllVolunteers
+  )
+  .post(
+    checkModuleAccess("volunteer"),
+    checkActionAccess("add"),
+    createVolunteer
+  );
+
+// Single record
+router.route("/volunteers/:id")
+  .get(
+    checkModuleAccess("volunteer"),
+    checkActionAccess("view"),
+    getVolunteerById
+  )
+  .put(
+    checkModuleAccess("volunteer"),
+    checkActionAccess("edit"),
+    updateVolunteer
+  )
+  .delete(
+    checkModuleAccess("volunteer"),
+    checkActionAccess("delete"),
+    deleteVolunteer
+  );
 
 // ── Organisations ─────────────────────────────────────────────────────────────
-// /bulk MUST be before /:id — otherwise Express matches "bulk" as an _id param
-router.post  ("/bulk", restrictTo("admin"), bulkCreateOrganisations);
-router.route ("/")
-  .get  (getAllOrganisations)
-  .post (restrictTo("admin"), createOrganisation);
-router.route ("/:id")
-  .get    (getOrganisationById)
-  .put    (restrictTo("admin"), updateOrganisation)
-  .delete (restrictTo("admin"), deleteOrganisation);
+
+// Bulk import — full_admin only
+router.post(
+  "/bulk",
+  requireRole("admin", "full_admin"),
+  checkModuleAccess("organisation"),
+  checkActionAccess("add"),
+  bulkCreateOrganisations
+);
+
+// List + create
+router.route("/")
+  .get(
+    checkModuleAccess("organisation"),
+    checkActionAccess("view"),
+    getAllOrganisations
+  )
+  .post(
+    checkModuleAccess("organisation"),
+    checkActionAccess("add"),
+    createOrganisation
+  );
+
+// Single record
+router.route("/:id")
+  .get(
+    checkModuleAccess("organisation"),
+    checkActionAccess("view"),
+    getOrganisationById
+  )
+  .put(
+    checkModuleAccess("organisation"),
+    checkActionAccess("edit"),
+    updateOrganisation
+  )
+  .delete(
+    checkModuleAccess("organisation"),
+    checkActionAccess("delete"),
+    deleteOrganisation
+  );
 
 export default router;

@@ -1,6 +1,11 @@
 // controllers/organisation.controller.js  (volunteers)
 import Volunteer from "../models/volunteer.model.js";
 import { asyncHandler, sendSuccess, sendError } from "../utils/response.utils.js";
+import {
+  getHiddenFields,
+  stripHiddenFields,
+  verifyOwnRecord,
+} from "../middleware/permission.middleware.js";
 
 const BULK_LIMIT = 500;
 
@@ -116,7 +121,18 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
     status, state, district, area_of_interest,
   } = req.query;
 
-  const query = { ...buildDateFilter(dateFrom, dateTo) };
+  // ── Permission scoping ──────────────────────────────────────────────────────
+  // data_entry: only own records  |  partial_admin: date range from permissions
+  const dataScope = req._dataScope  || {};
+  const dateScope = req._dateScope  || {};
+
+  // Explicit date filter from query takes precedence; if partial_admin has a
+  // permission window, use it only when no explicit query param is supplied.
+  const dateFilter = (dateFrom || dateTo)
+    ? buildDateFilter(dateFrom, dateTo)
+    : dateScope;
+
+  const query = { ...dataScope, ...dateFilter };
 
   if (search && search.trim()) {
     const regex = { $regex: search.trim(), $options: "i" };
@@ -148,8 +164,11 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
     Volunteer.countDocuments(query),
   ]);
 
+  const hidden = getHiddenFields(req);
+  const safeVolunteers = stripHiddenFields(volunteers, hidden);
+
   return sendSuccess(res, 200, "Volunteers retrieved successfully.", {
-    volunteers,
+    volunteers: safeVolunteers,
     total,
     page:  parseInt(page),
     pages: Math.ceil(total / parseInt(limit)),
@@ -161,11 +180,24 @@ export const getVolunteerById = asyncHandler(async (req, res) => {
   const volunteer = await Volunteer.findById(req.params.id)
     .populate("registered_by", "fullName email");
   if (!volunteer) return sendError(res, 404, "Volunteer not found.");
-  return sendSuccess(res, 200, "Volunteer retrieved successfully.", { volunteer });
+
+  const hidden = getHiddenFields(req);
+  const safeVolunteer = stripHiddenFields(volunteer.toObject(), hidden);
+
+  return sendSuccess(res, 200, "Volunteer retrieved successfully.", { volunteer: safeVolunteer });
 });
 
 // ── PUT /organisations/volunteers/:id ─────────────────────────────────────────
 export const updateVolunteer = asyncHandler(async (req, res) => {
+  // data_entry: can only edit own records
+  if (req.user.role === "data_entry") {
+    const existing = await Volunteer.findById(req.params.id).lean();
+    if (!existing) return sendError(res, 404, "Volunteer not found.");
+    if (!verifyOwnRecord(existing, req.user._id)) {
+      return sendError(res, 403, "You can only edit records you created.");
+    }
+  }
+
   const allowed = [
     "name", "phone", "email", "website", "address",
     "city", "district", "state", "area_of_interest",
@@ -191,6 +223,15 @@ export const updateVolunteer = asyncHandler(async (req, res) => {
 
 // ── DELETE /organisations/volunteers/:id ──────────────────────────────────────
 export const deleteVolunteer = asyncHandler(async (req, res) => {
+  // data_entry: can only delete own records
+  if (req.user.role === "data_entry") {
+    const existing = await Volunteer.findById(req.params.id).lean();
+    if (!existing) return sendError(res, 404, "Volunteer not found.");
+    if (!verifyOwnRecord(existing, req.user._id)) {
+      return sendError(res, 403, "You can only delete records you created.");
+    }
+  }
+
   const volunteer = await Volunteer.findByIdAndDelete(req.params.id);
   if (!volunteer) return sendError(res, 404, "Volunteer not found.");
   return sendSuccess(res, 200, "Volunteer deleted successfully.");
