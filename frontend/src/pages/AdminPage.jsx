@@ -1,6 +1,4 @@
 // ─── pages/AdminPage.jsx ─────────────────────────────────────────────────────
-// Production-grade: URL state sync, cascading state→district filter,
-// debounced search, abort-on-stale, optimistic pagination
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "../utils/axios.js";
@@ -48,7 +46,6 @@ export default function AdminPage() {
   // ── Permission helpers ─────────────────────────────────────────────────────
   const { canAccess, canDo, isFieldHidden, isFullAdmin, user: authUser } = useAuthStore();
 
-  // Filter available tabs to only modules this user can access
   const CATS = useMemo(() => {
     return ALL_CATS.filter((c) => canAccess(c.id));
   }, [authUser]); // eslint-disable-line
@@ -58,18 +55,16 @@ export default function AdminPage() {
   const canDelete = canDo("delete");
   const canImport = isFullAdmin();
 
-  // Filter columns for sensitive fields that are hidden from this user
-  const getVisibleColumns = useCallback((category) => {
-    return (category?.columns ?? []).filter((col) => !isFieldHidden(col.key));
+  const getVisibleColumns = useCallback((cat) => {
+    return (cat?.columns ?? []).filter((col) => !isFieldHidden(col.key));
   }, [authUser]); // eslint-disable-line
 
   // ── Derive initial state from URL ─────────────────────────────────────────
   const initialCat = useMemo(
     () => CATS.find((c) => c.id === (searchParams.get("tab") || "volunteer")) ?? CATS[0],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [] // eslint-disable-line
   );
-  const initial = useMemo(() => readParams(searchParams, initialCat), []);  // eslint-disable-line
+  const initial = useMemo(() => readParams(searchParams, initialCat), []); // eslint-disable-line
 
   const [activeTab,     setActiveTab]     = useState(initial.tab);
   const [data,          setData]          = useState([]);
@@ -91,28 +86,28 @@ export default function AdminPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showImport,    setShowImport]    = useState(false);
 
-  const [selectedIds,            setSelectedIds]            = useState(new Set());
-  const [showBulkDeleteConfirm,  setShowBulkDeleteConfirm]  = useState(false);
-  const [bulkDeleteLoading,      setBulkDeleteLoading]      = useState(false);
+  const [selectedIds,           setSelectedIds]           = useState(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [bulkDeleteLoading,     setBulkDeleteLoading]     = useState(false);
 
   const abortRef = useRef(null);
 
   // ── Category derived from tab ─────────────────────────────────────────────
   const category = useMemo(
-    () => CATS.find((c) => c.id === activeTab) ?? CATS[0],
-    [activeTab]
+    () => CATS.find((c) => c.id === activeTab) ?? CATS[0] ?? null,
+    [activeTab, CATS]
   );
 
   // ── Sync URL whenever relevant state changes ───────────────────────────────
   useEffect(() => {
     const p = new URLSearchParams();
     p.set("tab", activeTab);
-    if (page > 1)       p.set("page",      String(page));
-    if (search)         p.set("search",    search);
-    if (sortField !== "createdAt") p.set("sortField", sortField);
-    if (sortDir  !== "desc")       p.set("sortDir",   sortDir);
-    if (dateFrom)       p.set("dateFrom",  dateFrom);
-    if (dateTo)         p.set("dateTo",    dateTo);
+    if (page > 1)                      p.set("page",      String(page));
+    if (search)                        p.set("search",    search);
+    if (sortField !== "createdAt")     p.set("sortField", sortField);
+    if (sortDir   !== "desc")          p.set("sortDir",   sortDir);
+    if (dateFrom)                      p.set("dateFrom",  dateFrom);
+    if (dateTo)                        p.set("dateTo",    dateTo);
     Object.entries(filters).forEach(([k, v]) => { if (v) p.set(k, v); });
     setSearchParams(p, { replace: true });
   }, [activeTab, page, search, sortField, sortDir, dateFrom, dateTo, filters]); // eslint-disable-line
@@ -171,18 +166,12 @@ export default function AdminPage() {
 
   useEffect(() => { setSelectedIds(new Set()); }, [page, search, filters, dateFrom, dateTo]);
 
-  // ── Filter change handler (handles cascading) ─────────────────────────────
+  // ── Filter change handler ─────────────────────────────────────────────────
   const handleFilterChange = useCallback((key, val) => {
     setFilters((prev) => {
       const next = { ...prev, [key]: val };
-
-      // If this filter cascades (e.g. state → district), clear the dependent
-      const filterDef = category.filters.find((f) => f.key === key);
-      if (filterDef?.cascadesTo) {
-        delete next[filterDef.cascadesTo];
-      }
-
-      // Remove empty values
+      const filterDef = category?.filters?.find((f) => f.key === key);
+      if (filterDef?.cascadesTo) delete next[filterDef.cascadesTo];
       Object.keys(next).forEach((k) => { if (!next[k]) delete next[k]; });
       return next;
     });
@@ -213,7 +202,7 @@ export default function AdminPage() {
 
   // ── Single delete ─────────────────────────────────────────────────────────
   const handleDelete = async () => {
-    if (!deleteRecord) return;
+    if (!deleteRecord || !category) return;
     setDeleteLoading(true);
     try {
       await axios.delete(`${category.endpoint}/${deleteRecord._id}`);
@@ -226,6 +215,7 @@ export default function AdminPage() {
 
   // ── Bulk delete ───────────────────────────────────────────────────────────
   const handleBulkDelete = async () => {
+    if (!category) return;
     setBulkDeleteLoading(true);
     const ids = [...selectedIds];
     let success = 0;
@@ -248,6 +238,22 @@ export default function AdminPage() {
     setFilters({}); setDateFrom(""); setDateTo("");
     setSearch(""); setSearchInput(""); setPage(1);
   };
+
+  // ── No-access guard ───────────────────────────────────────────────────────
+  if (!category) {
+    return (
+      <div className="min-h-screen bg-[#0c0c14]">
+        <Navbar />
+        <div className="flex flex-col items-center justify-center h-[80vh] gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="#334155" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+          </svg>
+          <p className="text-slate-500 text-sm">No modules are available for your account.</p>
+          <p className="text-slate-600 text-xs">Contact your administrator to request access.</p>
+        </div>
+      </div>
+    );
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -328,8 +334,8 @@ export default function AdminPage() {
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap flex-1 justify-center"
                 style={{
                   background: a ? `${cat.accent}18` : "transparent",
-                  color: a ? cat.accent : "#475569",
-                  border: `1px solid ${a ? cat.accent + "30" : "transparent"}`,
+                  color:      a ? cat.accent : "#475569",
+                  border:    `1px solid ${a ? cat.accent + "30" : "transparent"}`,
                   transition: "all 0.15s ease",
                 }}
               >
@@ -368,14 +374,13 @@ export default function AdminPage() {
               )}
             </div>
 
-            {/* Dynamic filter dropdowns — pass dependent values for cascading */}
-            {category.filters.map((f) => (
+            {/* Dynamic filter dropdowns */}
+            {(category.filters ?? []).map((f) => (
               <FilterDropdown
                 key={`${activeTab}-${f.key}`}
                 filter={f}
                 value={filters[f.key] || ""}
                 accent={category.accent}
-                // For dependent dropdowns, pass parent's selected value
                 dependentValue={f.dependsOn ? (filters[f.dependsOn] || "") : undefined}
                 onChange={(v) => handleFilterChange(f.key, v)}
               />
@@ -437,12 +442,12 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* Active filter pills (compact summary row) */}
+          {/* Active filter pills */}
           {activeFiltersCount > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2.5 border-t border-slate-800/60">
               {Object.entries(filters).map(([k, v]) => {
                 if (!v) return null;
-                const fDef = category.filters.find((f) => f.key === k);
+                const fDef = (category.filters ?? []).find((f) => f.key === k);
                 return (
                   <span
                     key={k}
@@ -451,10 +456,7 @@ export default function AdminPage() {
                   >
                     <span className="opacity-60">{fDef?.label ?? k}:</span>
                     {v}
-                    <button
-                      onClick={() => handleFilterChange(k, "")}
-                      className="opacity-60 hover:opacity-100 transition-opacity"
-                    >
+                    <button onClick={() => handleFilterChange(k, "")} className="opacity-60 hover:opacity-100 transition-opacity">
                       <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
                       </svg>
@@ -493,10 +495,7 @@ export default function AdminPage() {
               <span className="text-sm font-semibold" style={{ color: category.accent }}>
                 {selectedIds.size} record{selectedIds.size !== 1 ? "s" : ""} selected
               </span>
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2"
-              >
+              <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2">
                 Clear
               </button>
             </div>
@@ -520,7 +519,7 @@ export default function AdminPage() {
           sortField={sortField} sortDir={sortDir} onSort={handleSort}
           selectedIds={selectedIds} onToggleAll={handleToggleAll} onToggleRow={handleToggleRow}
           onView={setViewRecord}
-          onEdit={canEdit ? setEditRecord : null}
+          onEdit={canEdit   ? setEditRecord   : null}
           onDelete={canDelete ? setDeleteRecord : null}
           onPageChange={setPage}
         />
