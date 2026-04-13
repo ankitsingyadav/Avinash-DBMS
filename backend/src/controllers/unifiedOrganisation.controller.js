@@ -11,7 +11,8 @@ import {
 const BULK_LIMIT = 500;
 
 const SORT_WHITELIST = new Set([
-  "centreName", "city", "district", "state", "status", "centreType", "createdAt", "updatedAt",
+  "centreName", "city", "district", "state",
+  "status", "centreType", "createdAt", "updatedAt",
 ]);
 
 const buildSort = (sortField = "createdAt", sortDir = "desc") => {
@@ -25,13 +26,8 @@ const normaliseWebsite = (v) => {
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 };
 
-const normalisePincode = (v) => {
-  return String(v || "")
-    .trim()
-    .replace(/\.0+$/, "")
-    .replace(/\D/g, "")
-    .slice(0, 6);
-};
+const normalisePincode = (v) =>
+  String(v || "").trim().replace(/\.0+$/, "").replace(/\D/g, "").slice(0, 6);
 
 const normaliseEmail = (raw, fallbackSlug = "record") => {
   const e = String(raw || "").trim().toLowerCase();
@@ -41,6 +37,28 @@ const normaliseEmail = (raw, fallbackSlug = "record") => {
 };
 
 const VALID_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
+
+// ─── Helper: safely merge dataScope $or with search $or ───────────────────────
+// data_entry produces _dataScope = { $or: [...] }
+// We must not clobber a search $or — use $and to combine both.
+const buildQuery = (dataScope, dateScope, searchOr, extraFilters = {}) => {
+  const query = { ...dateScope, ...extraFilters };
+
+  const ownerOr = dataScope?.$or ?? null;
+
+  if (ownerOr && searchOr) {
+    query.$and = [
+      { $or: ownerOr },
+      { $or: searchOr },
+    ];
+  } else if (ownerOr) {
+    query.$or = ownerOr;
+  } else if (searchOr) {
+    query.$or = searchOr;
+  }
+
+  return query;
+};
 
 // ── POST /api/v1/organisations ────────────────────────────────────────────────
 export const createOrganisation = asyncHandler(async (req, res) => {
@@ -56,12 +74,19 @@ export const createOrganisation = asyncHandler(async (req, res) => {
   if (!Array.isArray(contacts) || contacts.length === 0)
     return sendError(res, 422, "Contacts must be a non-empty array.");
 
-  // ── partial_admin module access check ─────────────────────────────────────
+  // partial_admin: check specific module/centreType access
   if (req.user.role === "partial_admin") {
     const mods = req.user.permissions?.allowedModules ?? [];
-    const hasAccess = mods.includes("organisation") || mods.includes(centreType);
-    if (!hasAccess) {
-      return sendError(res, 403, `You do not have access to create records for '${centreType}'.`);
+    const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
+    const hasCentreTypeScope = mods.some((m) => CENTRE_TYPES.includes(m));
+
+    if (hasCentreTypeScope) {
+      // Scoped to specific centreTypes — verify
+      if (!mods.includes(centreType) && !mods.includes("organisation")) {
+        return sendError(res, 403, `You do not have access to create records for '${centreType}'.`);
+      }
+    } else if (!mods.includes("organisation")) {
+      return sendError(res, 403, "You do not have access to the 'organisation' module.");
     }
   }
 
@@ -118,7 +143,6 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
 
   if (!Array.isArray(records) || records.length === 0)
     return sendError(res, 422, "Request body must contain a non-empty records array.");
-
   if (records.length > BULK_LIMIT)
     return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
 
@@ -223,11 +247,98 @@ export const getVolunteerDistrictsByState = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Districts retrieved successfully.", { districts });
 });
 
+// ── GET /api/v1/organisations ─────────────────────────────────────────────────
+export const getAllOrganisations = asyncHandler(async (req, res) => {
+  const {
+    page = 1, limit = 12,
+    search, sortField, sortDir,
+    status, state, district, city, centreType,
+  } = req.query;
+
+  const dataScope = req._dataScope || {};
+  const dateScope = req._dateScope || {};
+
+  // Extra filters built up first (before $or merging)
+  const extraFilters = {};
+
+  // partial_admin: scope to their allowed centreTypes if applicable
+  if (req.user.role === "partial_admin") {
+    const mods = req.user.permissions?.allowedModules ?? [];
+    const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
+    const centreTypes = mods.filter((m) => CENTRE_TYPES.includes(m));
+    if (centreTypes.length > 0) {
+      // If user also passed a centreType filter, intersect it
+      if (centreType && centreTypes.includes(centreType)) {
+        extraFilters.centreType = centreType;
+      } else {
+        extraFilters.centreType = { $in: centreTypes };
+      }
+    } else if (centreType) {
+      extraFilters.centreType = centreType;
+    }
+  } else if (centreType) {
+    extraFilters.centreType = centreType;
+  }
+
+  if (status)   extraFilters.status   = status;
+  if (state)    extraFilters.state    = state;
+  if (district) extraFilters.district = district;
+  if (city)     extraFilters.city     = city;
+
+  // Build search $or
+  let searchOr = null;
+  if (search && search.trim()) {
+    const regex     = { $regex: search.trim(), $options: "i" };
+    const searchStr = search.trim();
+    searchOr = [
+      { centreName:               regex },
+      { centreType:               regex },
+      { city:                     regex },
+      { district:                 regex },
+      { state:                    regex },
+      { onboardedBy:              regex },
+      { address:                  regex },
+      { "contacts.name":          regex },
+      { "contacts.email":         regex },
+      { "contacts.contactNumber": regex },
+      { pincode: { $regex: searchStr, $options: "i" } },
+    ];
+  }
+
+  const query = buildQuery(dataScope, dateScope, searchOr, extraFilters);
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const [organisations, total] = await Promise.all([
+    Organisation.find(query)
+      .sort(buildSort(sortField, sortDir))
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean(),
+    Organisation.countDocuments(query),
+  ]);
+
+  const hidden = getHiddenFields(req);
+  const safeOrgs = stripHiddenFields(organisations, hidden);
+
+  return sendSuccess(res, 200, "Organisations retrieved successfully.", {
+    organisations: safeOrgs,
+    total,
+    page:  parseInt(page),
+    pages: Math.ceil(total / parseInt(limit)),
+  });
+});
+
 // ── GET /api/v1/organisations/:id ─────────────────────────────────────────────
 export const getOrganisationById = asyncHandler(async (req, res) => {
   const organisation = await Organisation.findById(req.params.id)
     .populate("registeredBy", "fullName email");
   if (!organisation) return sendError(res, 404, "Organisation not found.");
+
+  // data_entry: verify ownership
+  if (req.user.role === "data_entry" && !verifyOwnRecord(organisation, req.user._id)) {
+    return sendError(res, 403, "You can only view records you created.");
+  }
 
   const hidden = getHiddenFields(req);
   const safeOrg = stripHiddenFields(organisation.toObject(), hidden);
@@ -237,7 +348,6 @@ export const getOrganisationById = asyncHandler(async (req, res) => {
 
 // ── PUT /api/v1/organisations/:id ─────────────────────────────────────────────
 export const updateOrganisation = asyncHandler(async (req, res) => {
-  // data_entry: can only edit own records
   if (req.user.role === "data_entry") {
     const existing = await Organisation.findById(req.params.id).lean();
     if (!existing) return sendError(res, 404, "Organisation not found.");
@@ -276,7 +386,6 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
 
 // ── DELETE /api/v1/organisations/:id ─────────────────────────────────────────
 export const deleteOrganisation = asyncHandler(async (req, res) => {
-  // data_entry: can only delete own records
   if (req.user.role === "data_entry") {
     const existing = await Organisation.findById(req.params.id).lean();
     if (!existing) return sendError(res, 404, "Organisation not found.");
@@ -288,79 +397,4 @@ export const deleteOrganisation = asyncHandler(async (req, res) => {
   const organisation = await Organisation.findByIdAndDelete(req.params.id);
   if (!organisation) return sendError(res, 404, "Organisation not found.");
   return sendSuccess(res, 200, "Organisation deleted successfully.");
-});
-
-// ── GET /api/v1/organisations ─────────────────────────────────────────────────
-export const getAllOrganisations = asyncHandler(async (req, res) => {
-  const {
-    page = 1, limit = 12,
-    search, sortField, sortDir,
-    status, state, district, city, centreType,
-  } = req.query;
-
-  // ── Permission scoping ──────────────────────────────────────────────────────
-  const dataScope = req._dataScope || {};
-  const dateScope = req._dateScope || {};
-
-  const query = { ...dataScope, ...dateScope };
-
-  // partial_admin: if allowedModules has specific centreTypes (e.g. ["School","NGO"]),
-  // scope the query to only those types
-  if (req.user.role === "partial_admin") {
-    const mods = req.user.permissions?.allowedModules ?? [];
-    const centreTypes = mods.filter((m) =>
-      ["School", "College", "NGO", "Corporate", "Online", "Community Centre"].includes(m)
-    );
-    if (centreTypes.length > 0) {
-      query.centreType = { $in: centreTypes };
-    }
-  }
-
-  if (search && search.trim()) {
-    const regex     = { $regex: search.trim(), $options: "i" };
-    const searchStr = search.trim();
-
-    query.$or = [
-      { centreName:               regex },
-      { centreType:               regex },
-      { city:                     regex },
-      { district:                 regex },
-      { state:                    regex },
-      { onboardedBy:              regex },
-      { address:                  regex },
-      { "contacts.name":          regex },
-      { "contacts.email":         regex },
-      { "contacts.contactNumber": regex },
-      { pincode: { $regex: searchStr, $options: "i" } },
-      { $expr: { $regexMatch: { input: { $toString: "$pincode" }, regex: searchStr } } },
-    ];
-  }
-
-  if (status)     query.status     = status;
-  if (state)      query.state      = state;
-  if (district)   query.district   = district;
-  if (city)       query.city       = city;
-  // Only apply centreType param if partial_admin hasn't already scoped it
-  if (centreType && !query.centreType) query.centreType = centreType;
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-
-  const [organisations, total] = await Promise.all([
-    Organisation.find(query)
-      .sort(buildSort(sortField, sortDir))
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean(),
-    Organisation.countDocuments(query),
-  ]);
-
-  const hidden = getHiddenFields(req);
-  const safeOrgs = stripHiddenFields(organisations, hidden);
-
-  return sendSuccess(res, 200, "Organisations retrieved successfully.", {
-    organisations: safeOrgs,
-    total,
-    page:  parseInt(page),
-    pages: Math.ceil(total / parseInt(limit)),
-  });
 });

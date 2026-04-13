@@ -15,7 +15,7 @@ import EditModal          from "../admin/components/EditModal.jsx";
 import ViewModal          from "../admin/components/ViewModal.jsx";
 import ImportModal        from "../admin/components/ImportModal.jsx";
 import DataTable          from "../admin/components/DataTable.jsx";
-import useAuthStore       from "../context/authStore.js";
+import useAuthStore, { roleHelpers } from "../context/authStore.js";
 
 const ALL_CATS = CATEGORIES.map((c) => ({ ...c, icon: CATEGORY_ICONS[c.id] }));
 
@@ -43,21 +43,47 @@ export default function AdminPage() {
   const location  = useLocation();
   const navigate  = useNavigate();
 
-  // ── Permission helpers ─────────────────────────────────────────────────────
-  const { canAccess, canDo, isFieldHidden, isFullAdmin, user: authUser } = useAuthStore();
+  // ── Auth store ─────────────────────────────────────────────────────────────
+  // FIX: Pull `user` directly from the store so all derived permission checks
+  // are recalculated whenever the user object changes (e.g. after login).
+  // Using the store's selector functions directly caused stale closures when
+  // the user was not yet loaded.
+  const authUser = useAuthStore((s) => s.user);
 
+  // Derive permission booleans from the current user using roleHelpers
+  // (pure functions — no closure risk)
+  const isFullAdmin = roleHelpers.isFullAdmin(authUser);
+
+  const canAccess = useCallback(
+    (module) => roleHelpers.canAccess(authUser, module),
+    [authUser]
+  );
+  const canDo = useCallback(
+    (action) => roleHelpers.canDo(authUser, action),
+    [authUser]
+  );
+  const isFieldHidden = useCallback(
+    (field) => roleHelpers.isFieldHidden(authUser, field),
+    [authUser]
+  );
+
+  // ── Filtered category list for this user ──────────────────────────────────
+  // FIX: Previously depended on the store selector `canAccess` which could be
+  // stale. Now recalculated directly from authUser.
   const CATS = useMemo(() => {
-    return ALL_CATS.filter((c) => canAccess(c.id));
-  }, [authUser]); // eslint-disable-line
+    if (!authUser) return [];
+    return ALL_CATS.filter((c) => roleHelpers.canAccess(authUser, c.id));
+  }, [authUser]);
 
   const canAdd    = canDo("add");
   const canEdit   = canDo("edit");
   const canDelete = canDo("delete");
-  const canImport = isFullAdmin();
+  const canImport = isFullAdmin;
 
-  const getVisibleColumns = useCallback((cat) => {
-    return (cat?.columns ?? []).filter((col) => !isFieldHidden(col.key));
-  }, [authUser]); // eslint-disable-line
+  const getVisibleColumns = useCallback(
+    (cat) => (cat?.columns ?? []).filter((col) => !isFieldHidden(col.key)),
+    [isFieldHidden]
+  );
 
   // ── Derive initial state from URL ─────────────────────────────────────────
   const initialCat = useMemo(
@@ -97,6 +123,13 @@ export default function AdminPage() {
     () => CATS.find((c) => c.id === activeTab) ?? CATS[0] ?? null,
     [activeTab, CATS]
   );
+
+  // ── If active tab is not accessible, switch to first available ────────────
+  useEffect(() => {
+    if (CATS.length > 0 && !CATS.find((c) => c.id === activeTab)) {
+      setActiveTab(CATS[0].id);
+    }
+  }, [CATS, activeTab]);
 
   // ── Sync URL whenever relevant state changes ───────────────────────────────
   useEffect(() => {
@@ -152,7 +185,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, page, search, sortField, sortDir, dateFrom, dateTo, filters]);
+  }, [activeTab, page, search, sortField, sortDir, dateFrom, dateTo, filters, CATS]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
@@ -485,7 +518,7 @@ export default function AdminPage() {
         </div>
 
         {/* Bulk action bar */}
-        {selectedIds.size > 0 && (
+        {selectedIds.size > 0 && canDelete && (
           <div
             className="flex items-center justify-between px-4 py-2.5 mb-3 rounded-xl border"
             style={{ background: `${category.accent}0c`, border: `1px solid ${category.accent}25` }}

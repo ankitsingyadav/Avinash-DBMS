@@ -1,14 +1,14 @@
 // routes/organisation.routes.js
+// ─── All permission middlewares properly wired ────────────────────────────────
 import express from "express";
-
+import { protect } from "../middleware/auth.middleware.js";
 import {
-  createVolunteer,
-  bulkCreateVolunteers,
-  getAllVolunteers,
-  getVolunteerById,
-  updateVolunteer,
-  deleteVolunteer,
-} from "../controllers/organisation.controller.js";
+  requireRole,
+  checkModuleAccess,
+  checkActionAccess,
+  applyDataScope,
+  applyDateRangeScope,
+} from "../middleware/permission.middleware.js";
 
 import {
   createOrganisation,
@@ -21,114 +21,138 @@ import {
   getVolunteerDistrictsByState,
 } from "../controllers/unifiedOrganisation.controller.js";
 
-import { protect } from "../middleware/auth.middleware.js";
 import {
-  requireRole,
-  checkModuleAccess,
-  checkActionAccess,
-  applyDataScope,
-  applyDateRangeScope,
-} from "../middleware/permission.middleware.js";
+  createVolunteer,
+  bulkCreateVolunteers,
+  getAllVolunteers,
+  getVolunteerById,
+  updateVolunteer,
+  deleteVolunteer,
+} from "../controllers/organisation.controller.js";
 
 const router = express.Router();
 
-// All routes require authentication
+// ── All routes require authentication ─────────────────────────────────────────
 router.use(protect);
 
-// Apply data + date scope on every request (middleware reads role internally)
-router.use(applyDataScope);
-router.use(applyDateRangeScope);
+// ── Meta endpoints (no module/action restriction needed) ──────────────────────
+router.get("/meta/districts",            requireRole("full_admin", "admin", "partial_admin", "data_entry", "user"), getDistrictsByState);
+router.get("/volunteers/meta/districts", requireRole("full_admin", "admin", "partial_admin", "data_entry", "user"), getVolunteerDistrictsByState);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// IMPORTANT: All literal/static sub-paths MUST come before "/:id" routes.
+// VOLUNTEER ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Meta ──────────────────────────────────────────────────────────────────────
-router.get("/meta/districts",            getDistrictsByState);
-router.get("/volunteers/meta/districts", getVolunteerDistrictsByState);
+// GET  /organisations/volunteers  — list (scoped by role)
+router.get(
+  "/volunteers",
+  checkModuleAccess("volunteer"),
+  applyDataScope,
+  applyDateRangeScope,
+  checkActionAccess("view"),
+  getAllVolunteers
+);
 
-// ── Volunteers ────────────────────────────────────────────────────────────────
+// GET  /organisations/volunteers/:id
+router.get(
+  "/volunteers/:id",
+  checkModuleAccess("volunteer"),
+  applyDataScope,
+  applyDateRangeScope,
+  checkActionAccess("view"),
+  getVolunteerById
+);
 
-// Bulk import — full_admin only
+// POST /organisations/volunteers  — create single
+router.post(
+  "/volunteers",
+  checkModuleAccess("volunteer"),
+  applyDataScope,
+  checkActionAccess("add"),
+  createVolunteer
+);
+
+// POST /organisations/volunteers/bulk
 router.post(
   "/volunteers/bulk",
-  requireRole("admin", "full_admin"),
-  checkModuleAccess("volunteer"),
-  checkActionAccess("add"),
+  requireRole("full_admin", "admin"),          // bulk import = full_admin only
   bulkCreateVolunteers
 );
 
-// List + create
-router.route("/volunteers")
-  .get(
-    checkModuleAccess("volunteer"),
-    checkActionAccess("view"),
-    getAllVolunteers
-  )
-  .post(
-    checkModuleAccess("volunteer"),
-    checkActionAccess("add"),
-    createVolunteer
-  );
+// PUT  /organisations/volunteers/:id
+router.put(
+  "/volunteers/:id",
+  checkModuleAccess("volunteer"),
+  applyDataScope,
+  checkActionAccess("edit"),
+  updateVolunteer
+);
 
-// Single record
-router.route("/volunteers/:id")
-  .get(
-    checkModuleAccess("volunteer"),
-    checkActionAccess("view"),
-    getVolunteerById
-  )
-  .put(
-    checkModuleAccess("volunteer"),
-    checkActionAccess("edit"),
-    updateVolunteer
-  )
-  .delete(
-    checkModuleAccess("volunteer"),
-    checkActionAccess("delete"),
-    deleteVolunteer
-  );
+// DELETE /organisations/volunteers/:id
+router.delete(
+  "/volunteers/:id",
+  checkModuleAccess("volunteer"),
+  applyDataScope,
+  checkActionAccess("delete"),
+  deleteVolunteer
+);
 
-// ── Organisations ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ORGANISATION (CENTRE) ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Bulk import — full_admin only
+// GET  /organisations  — list (scoped by role + centreType)
+router.get(
+  "/",
+  checkModuleAccess("organisation"),
+  applyDataScope,
+  applyDateRangeScope,
+  checkActionAccess("view"),
+  getAllOrganisations
+);
+
+// GET  /organisations/:id
+router.get(
+  "/:id",
+  checkModuleAccess("organisation"),
+  applyDataScope,
+  applyDateRangeScope,
+  checkActionAccess("view"),
+  getOrganisationById
+);
+
+// POST /organisations  — create single
+router.post(
+  "/",
+  checkModuleAccess("organisation"),
+  applyDataScope,
+  checkActionAccess("add"),
+  createOrganisation
+);
+
+// POST /organisations/bulk
 router.post(
   "/bulk",
-  requireRole("admin", "full_admin"),
-  checkModuleAccess("organisation"),
-  checkActionAccess("add"),
+  requireRole("full_admin", "admin"),          // bulk import = full_admin only
   bulkCreateOrganisations
 );
 
-// List + create
-router.route("/")
-  .get(
-    checkModuleAccess("organisation"),
-    checkActionAccess("view"),
-    getAllOrganisations
-  )
-  .post(
-    checkModuleAccess("organisation"),
-    checkActionAccess("add"),
-    createOrganisation
-  );
+// PUT  /organisations/:id
+router.put(
+  "/:id",
+  checkModuleAccess("organisation"),
+  applyDataScope,
+  checkActionAccess("edit"),
+  updateOrganisation
+);
 
-// Single record
-router.route("/:id")
-  .get(
-    checkModuleAccess("organisation"),
-    checkActionAccess("view"),
-    getOrganisationById
-  )
-  .put(
-    checkModuleAccess("organisation"),
-    checkActionAccess("edit"),
-    updateOrganisation
-  )
-  .delete(
-    checkModuleAccess("organisation"),
-    checkActionAccess("delete"),
-    deleteOrganisation
-  );
+// DELETE /organisations/:id
+router.delete(
+  "/:id",
+  checkModuleAccess("organisation"),
+  applyDataScope,
+  checkActionAccess("delete"),
+  deleteOrganisation
+);
 
 export default router;

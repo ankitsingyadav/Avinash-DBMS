@@ -10,7 +10,8 @@ import {
 const BULK_LIMIT = 500;
 
 const SORT_WHITELIST = new Set([
-  "name", "email", "city", "district", "state", "status", "follow_up_date", "createdAt", "updatedAt",
+  "name", "email", "city", "district", "state",
+  "status", "follow_up_date", "createdAt", "updatedAt",
 ]);
 
 const buildSort = (sortField = "createdAt", sortDir = "desc") => {
@@ -122,21 +123,35 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
   } = req.query;
 
   // ── Permission scoping ──────────────────────────────────────────────────────
-  // data_entry: only own records  |  partial_admin: date range from permissions
-  const dataScope = req._dataScope  || {};
-  const dateScope = req._dateScope  || {};
+  // _dataScope comes from applyDataScope middleware
+  // _dateScope comes from applyDateRangeScope middleware
+  //
+  // FIX: _dataScope is now { $or: [...] } for data_entry, or {} for others.
+  // We must merge it carefully into the query without clobbering a search $or.
+  const dataScope = req._dataScope || {};
+  const dateScope = req._dateScope || {};
 
-  // Explicit date filter from query takes precedence; if partial_admin has a
-  // permission window, use it only when no explicit query param is supplied.
+  // Explicit date filter from query takes precedence over permission date window
   const dateFilter = (dateFrom || dateTo)
     ? buildDateFilter(dateFrom, dateTo)
     : dateScope;
 
-  const query = { ...dataScope, ...dateFilter };
+  // Start with date and data scope
+  // Note: if dataScope has $or, we wrap everything in $and to avoid conflicts
+  // with the search $or below
+  let query = { ...dateFilter };
 
+  // Apply data_entry ownership scope
+  if (dataScope.$or) {
+    // Will be added to $and array below alongside search
+    query._ownerScope = dataScope.$or;
+  }
+
+  // Build search $or
+  let searchOr = null;
   if (search && search.trim()) {
     const regex = { $regex: search.trim(), $options: "i" };
-    query.$or = [
+    searchOr = [
       { name:             regex },
       { email:            regex },
       { phone:            regex },
@@ -147,6 +162,20 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
       { remarks:          regex },
       { address:          regex },
     ];
+  }
+
+  // Merge $or clauses safely using $and
+  if (query._ownerScope && searchOr) {
+    query.$and = [
+      { $or: query._ownerScope },
+      { $or: searchOr },
+    ];
+    delete query._ownerScope;
+  } else if (query._ownerScope) {
+    query.$or = query._ownerScope;
+    delete query._ownerScope;
+  } else if (searchOr) {
+    query.$or = searchOr;
   }
 
   if (status)           query.status           = status;
@@ -181,6 +210,11 @@ export const getVolunteerById = asyncHandler(async (req, res) => {
     .populate("registered_by", "fullName email");
   if (!volunteer) return sendError(res, 404, "Volunteer not found.");
 
+  // data_entry: verify ownership
+  if (req.user.role === "data_entry" && !verifyOwnRecord(volunteer, req.user._id)) {
+    return sendError(res, 403, "You can only view records you created.");
+  }
+
   const hidden = getHiddenFields(req);
   const safeVolunteer = stripHiddenFields(volunteer.toObject(), hidden);
 
@@ -189,7 +223,6 @@ export const getVolunteerById = asyncHandler(async (req, res) => {
 
 // ── PUT /organisations/volunteers/:id ─────────────────────────────────────────
 export const updateVolunteer = asyncHandler(async (req, res) => {
-  // data_entry: can only edit own records
   if (req.user.role === "data_entry") {
     const existing = await Volunteer.findById(req.params.id).lean();
     if (!existing) return sendError(res, 404, "Volunteer not found.");
@@ -223,7 +256,6 @@ export const updateVolunteer = asyncHandler(async (req, res) => {
 
 // ── DELETE /organisations/volunteers/:id ──────────────────────────────────────
 export const deleteVolunteer = asyncHandler(async (req, res) => {
-  // data_entry: can only delete own records
   if (req.user.role === "data_entry") {
     const existing = await Volunteer.findById(req.params.id).lean();
     if (!existing) return sendError(res, 404, "Volunteer not found.");

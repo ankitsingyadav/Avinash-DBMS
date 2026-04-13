@@ -2,26 +2,52 @@ import { create } from "zustand";
 import axiosInstance from "../utils/axios";
 import toast from "react-hot-toast";
 
+// ─── Centre-type sub-modules (imply "organisation" access) ────────────────────
+const CENTRE_TYPE_MODULES = [
+  "School", "College", "NGO", "Corporate", "Online", "Community Centre",
+];
+
 // ─── Role helpers (exported, also used by permission-aware components) ─────────
 export const roleHelpers = {
   isFullAdmin:    (user) => user?.role === "admin" || user?.role === "full_admin",
   isPartialAdmin: (user) => user?.role === "partial_admin",
   isDataEntry:    (user) => user?.role === "data_entry",
-  canAccess:      (user, module)  => {
+
+  // canAccess — checks if a user can access a top-level module ("volunteer" | "organisation")
+  // FIX: partial_admin ke allowedModules mein "School","NGO" etc. hone par bhi
+  // "organisation" module ka access milna chahiye, kyunki ye sub-modules hain.
+  canAccess: (user, module) => {
     if (!user) return false;
     if (roleHelpers.isFullAdmin(user)) return true;
-    return (user.permissions?.allowedModules ?? []).includes(module);
+
+    // data_entry: always has access (scoped by ownership at API level)
+    if (roleHelpers.isDataEntry(user)) return true;
+
+    const allowed = user.permissions?.allowedModules ?? [];
+
+    // Direct match — e.g. "volunteer" or "organisation"
+    if (allowed.includes(module)) return true;
+
+    // Sub-module match — e.g. ["School","NGO"] implies "organisation" access
+    if (module === "organisation" && allowed.some((m) => CENTRE_TYPE_MODULES.includes(m))) {
+      return true;
+    }
+
+    return false;
   },
-  canDo:          (user, action)  => {
+
+  canDo: (user, action) => {
     if (!user) return false;
     if (roleHelpers.isFullAdmin(user)) return true;
     return (user.permissions?.allowedActions ?? []).includes(action);
   },
-  isFieldHidden:  (user, field)   => {
+
+  isFieldHidden: (user, field) => {
     if (!user || roleHelpers.isFullAdmin(user)) return false;
     return (user.permissions?.hiddenFields ?? []).includes(field);
   },
-  roleLabel:      (user) => {
+
+  roleLabel: (user) => {
     const map = {
       admin:         "Full Admin",
       full_admin:    "Full Admin",

@@ -285,12 +285,6 @@ export function parseWorkbook(wb) {
   return detected;
 }
 
-// ── Validate plan required fields ─────────────────────────────────────────────
-//
-// FIX 7: validation was incorrectly blocking imports when contacts phone/email
-//        were missing from the row even though buildPayload provides safe
-//        defaults. Validation now only hard-errors on truly unrecoverable
-//        missing fields (name / centreName).
 
 export function validatePlan(active) {
   const errors = [];
