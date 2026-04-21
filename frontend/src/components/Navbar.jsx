@@ -52,7 +52,7 @@ export default function Navbar() {
         <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
           <div className="w-9 h-9 rounded-xl overflow-hidden ring-1 ring-indigo-500/30">
             <img
-              src="/logo.png"
+              src="/favicon.svg"
               alt="DB Manager"
               className="w-full h-full object-cover"
               onError={(e) => {

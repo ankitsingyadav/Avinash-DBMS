@@ -13,11 +13,16 @@ import userManagementRoutes from "./routes/userManagement.routes.js";
 import errorHandler from "./middleware/error.middleware.js";
 
 const app = express();
+app.set("trust proxy", 1);
 const PORT = process.env.PORT || 3000;
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+const allowedOrigins = process.env.CLIENT_URL 
+  ? process.env.CLIENT_URL.split(",").map(url => url.trim().replace(/\/$/, "")) 
+  : ["http://localhost:5173","https://databasemanagement-theta.vercel.app"];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:5173",
+  origin: allowedOrigins,
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
