@@ -188,7 +188,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div>
-                  <label className="field-label">Phone  Number</label>
+                  <label className="field-label">Phone Number</label>
                   <input
                     value={form.phone}
                     onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
