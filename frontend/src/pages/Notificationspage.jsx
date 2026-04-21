@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
 import Navbar from "../components/Navbar";
+import NotificationsPage from "./pages/NotificationsPage";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const getTimeRemaining = (date) => {
