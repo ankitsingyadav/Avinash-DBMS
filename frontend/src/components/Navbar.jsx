@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import useAuthStore from "../context/authStore";
+import NotificationBell from "./Notificationbell";
 
-// Role badge config
 const ROLE_CONFIG = {
   admin:         { label: "Full Admin",    color: "#f59e0b" },
   full_admin:    { label: "Full Admin",    color: "#f59e0b" },
@@ -12,15 +12,20 @@ const ROLE_CONFIG = {
 };
 
 export default function Navbar() {
-  const { user, isAuthenticated, logout, isFullAdmin } = useAuthStore();
+  const { user, isAuthenticated, logout } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const isAdminRole = ["admin","full_admin","partial_admin","data_entry"].includes(user?.role);
-  const isFA = isFullAdmin?.() ?? (user?.role === "admin" || user?.role === "full_admin");
-  const roleConf = ROLE_CONFIG[user?.role] || ROLE_CONFIG.user;
+  const isAdminRole = ["admin", "full_admin", "partial_admin", "data_entry"].includes(user?.role);
+  const isFA        = user?.role === "admin" || user?.role === "full_admin";
+  const roleConf    = ROLE_CONFIG[user?.role] || ROLE_CONFIG.user;
+
+  const canViewNotifications = isAuthenticated && (
+    isFA ||
+    (isAdminRole && user?.permissions?.notificationAccess === true)
+  );
 
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
@@ -35,15 +40,15 @@ export default function Navbar() {
     { label: "Home",         to: "/" },
     { label: "About",        to: "/about" },
     { label: "Organisation", to: "/organisation" },
-    ...(isAdminRole ? [{ label: "Admin Panel", to: "/admin", badge: roleConf.label, badgeColor: roleConf.color }] : []),
-    ...(isFA         ? [{ label: "Access Control", to: "/access-control", badge: "ADMIN", badgeColor: "#f59e0b" }] : []),
+    ...(isAdminRole ? [{ label: "Admin Panel",     to: "/admin",          badge: roleConf.label, badgeColor: roleConf.color }] : []),
+    ...(isFA        ? [{ label: "Access Control",  to: "/access-control", badge: "ADMIN",        badgeColor: "#f59e0b"      }] : []),
   ];
 
   return (
     <nav className="w-full border-b border-slate-800/60 bg-[#0c0c14]/90 backdrop-blur-md sticky top-0 z-50 relative">
       <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
 
-        {/* ── Logo ─────────────────────────────────────── */}
+        {/* ── Logo ─────────────────────────────────────────────────────────── */}
         <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
           <div className="w-9 h-9 rounded-xl overflow-hidden ring-1 ring-indigo-500/30">
             <img
@@ -72,7 +77,7 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* ── Center Nav ───────────────────────────────── */}
+        {/* ── Center Nav ───────────────────────────────────────────────────── */}
         <div className="hidden md:flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/40">
           {navLinks.map((link) => (
             <Link
@@ -91,7 +96,7 @@ export default function Navbar() {
               )}
               {link.label === "Access Control" && (
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
                 </svg>
               )}
               {link.label}
@@ -111,8 +116,14 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* ── Right: Auth ───────────────────────────────── */}
-        <div className="flex items-center gap-3">
+        {/* ── Right: Auth + Notification ───────────────────────────────────── */}
+        <div className="flex items-center gap-2.5">
+
+          {/* Notification Bell */}
+          {isAuthenticated && (
+            <NotificationBell canViewNotifications={canViewNotifications} />
+          )}
+
           {isAuthenticated ? (
             <div className="relative">
               <button
@@ -147,7 +158,7 @@ export default function Navbar() {
                 </svg>
               </button>
 
-              {/* ── Dropdown ────────────────────────────────── */}
+              {/* ── Dropdown ──────────────────────────────────────────────── */}
               {profileOpen && (
                 <div className="absolute right-0 top-full mt-2 w-56 bg-[#13131f] border border-slate-700/60 rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50">
 
@@ -169,14 +180,13 @@ export default function Navbar() {
 
                   {/* Links */}
                   <div className="py-1.5">
-
                     <Link
                       to="/profile"
                       onClick={() => setProfileOpen(false)}
                       className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
                       </svg>
                       My Profile
                     </Link>
@@ -192,7 +202,6 @@ export default function Navbar() {
                       Organisation
                     </Link>
 
-                    {/* Admin Panel — all admin roles */}
                     {isAdminRole && (
                       <>
                         <Link
@@ -201,7 +210,7 @@ export default function Navbar() {
                           className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
                           </svg>
                           Dashboard
                         </Link>
@@ -212,14 +221,13 @@ export default function Navbar() {
                           style={{ color: roleConf.color }}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
                           </svg>
                           Admin Panel
                         </Link>
                       </>
                     )}
 
-                    {/* Access Control — full admin only */}
                     {isFA && (
                       <Link
                         to="/access-control"
@@ -228,7 +236,7 @@ export default function Navbar() {
                         style={{ color: "#f59e0b" }}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/>
                         </svg>
                         Access Control
                         <span className="ml-auto text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/25 px-1.5 py-0.5 rounded-full font-semibold">
@@ -244,7 +252,7 @@ export default function Navbar() {
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/5 transition-colors"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
                       </svg>
                       Sign Out
                     </button>

@@ -1,5 +1,4 @@
-// pages/AccessControlPage.jsx
-// ─── Production-Grade: Full Admin User Management + Permission Assignment ─────
+// ─── pages/AccessControlPage.jsx ─────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
@@ -71,9 +70,10 @@ const getRoleLabel = (role) => {
 };
 
 const initPermissions = (user) => ({
-  allowedModules: user?.permissions?.allowedModules ?? [],
-  allowedActions: user?.permissions?.allowedActions ?? [],
-  hiddenFields:   user?.permissions?.hiddenFields   ?? [],
+  allowedModules:     user?.permissions?.allowedModules ?? [],
+  allowedActions:     user?.permissions?.allowedActions ?? [],
+  hiddenFields:       user?.permissions?.hiddenFields   ?? [],
+  notificationAccess: user?.permissions?.notificationAccess ?? false,
   dateFrom: user?.permissions?.dateFrom ? user.permissions.dateFrom.slice(0, 10) : "",
   dateTo:   user?.permissions?.dateTo   ? user.permissions.dateTo.slice(0, 10)   : "",
 });
@@ -142,6 +142,7 @@ const GLOBAL_CSS = `
     border-radius: 99px; border: none; padding: 3px;
     display: flex; align-items: center;
     transition: background 0.22s; cursor: pointer; outline: none;
+    flex-shrink: 0;
   }
   .acl-toggle:focus-visible { box-shadow: 0 0 0 2px #6366f1; }
   .acl-toggle-thumb {
@@ -195,6 +196,21 @@ const GLOBAL_CSS = `
     transition: all 0.15s; border: 1px solid;
     display: flex; flex-direction: column; align-items: center; gap: 4px;
   }
+
+  /* Responsive table */
+  @media (max-width: 900px) {
+    .acl-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .acl-table-header,
+    .acl-table-row {
+      min-width: 700px;
+    }
+  }
+  @media (max-width: 640px) {
+    .acl-stat-grid { grid-template-columns: repeat(3, 1fr) !important; }
+  }
+  @media (max-width: 420px) {
+    .acl-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  }
 `;
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -236,7 +252,7 @@ const Avatar = memo(({ user, size = 36 }) => {
 
 // Skeleton row
 const SkeletonRow = () => (
-  <div style={{ display: "grid", gridTemplateColumns: "2fr 1.6fr 1fr 1.3fr 1.3fr 80px 100px", padding: "14px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.04)", gap: 0 }}>
+  <div className="acl-table-row" style={{ display: "grid", gridTemplateColumns: "2fr 1.6fr 1fr 1.3fr 1.3fr 80px 100px", padding: "14px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.04)", gap: 0 }}>
     {[140, 120, 70, 100, 80, 40, 80].map((w, i) => (
       <div key={i} className="acl-skeleton" style={{ height: 14, width: w, borderRadius: 6 }} />
     ))}
@@ -253,18 +269,17 @@ const StatCard = memo(({ label, value, color, filterKey, activeFilter, onClick, 
       style={{
         background: isActive ? `${color}10` : "#111119",
         border: `1px solid ${isActive ? color + "45" : "rgba(255,255,255,0.05)"}`,
-        padding: "18px 20px",
+        padding: "14px 16px",
         position: "relative", overflow: "hidden",
         boxShadow: isActive ? `0 0 0 1px ${color}25, 0 8px 32px ${color}14` : "none",
       }}
     >
-      {/* Glow bg */}
       {isActive && (
         <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: `${color}14`, filter: "blur(20px)", pointerEvents: "none" }} />
       )}
 
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ fontSize: 18, lineHeight: 1 }}>{icon}</div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ fontSize: 16, lineHeight: 1 }}>{icon}</div>
         {isActive && (
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, boxShadow: `0 0 8px ${color}` }} />
         )}
@@ -272,14 +287,14 @@ const StatCard = memo(({ label, value, color, filterKey, activeFilter, onClick, 
 
       <div style={{
         color: isActive ? color : "#e2e8f0",
-        fontSize: 30, fontWeight: 800, lineHeight: 1,
+        fontSize: 26, fontWeight: 800, lineHeight: 1,
         fontFamily: "'JetBrains Mono', monospace",
         fontVariantNumeric: "tabular-nums",
         transition: "color 0.18s",
       }}>
         {value}
       </div>
-      <div style={{ color: isActive ? color : "#475569", fontSize: 11.5, fontWeight: 600, marginTop: 6, transition: "color 0.18s", letterSpacing: "0.02em" }}>
+      <div style={{ color: isActive ? color : "#475569", fontSize: 11, fontWeight: 600, marginTop: 5, transition: "color 0.18s", letterSpacing: "0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {label}
       </div>
 
@@ -305,7 +320,12 @@ function PermissionPanel({ user, onClose, onSaved }) {
     try {
       await axios.patch(`/users/${user._id}/permissions`, {
         role,
-        permissions: { ...perms, dateFrom: perms.dateFrom || null, dateTo: perms.dateTo || null },
+        permissions: {
+          ...perms,
+          dateFrom: perms.dateFrom || null,
+          dateTo:   perms.dateTo   || null,
+          notificationAccess: perms.notificationAccess,
+        },
       });
       toast.success("Permissions saved successfully.");
       onSaved();
@@ -321,6 +341,7 @@ function PermissionPanel({ user, onClose, onSaved }) {
   const showActions      = role === "partial_admin" || role === "data_entry";
   const showDateRange    = role === "partial_admin";
   const showHiddenFields = role === "partial_admin" || role === "data_entry";
+  const showNotifAccess  = role === "partial_admin" || role === "data_entry";
 
   const selectedRole = ROLES.find((r) => r.value === role);
 
@@ -344,7 +365,7 @@ function PermissionPanel({ user, onClose, onSaved }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="acl-panel acl-scroll" style={{
-        width: "min(500px, 96vw)", height: "100vh",
+        width: "min(500px, 100vw)", height: "100vh",
         background: "#0d0d18", borderLeft: "1px solid rgba(99,102,241,0.12)",
         overflowY: "auto", padding: "0",
         display: "flex", flexDirection: "column",
@@ -397,6 +418,55 @@ function PermissionPanel({ user, onClose, onSaved }) {
               </div>
             )}
           </section>
+
+          {/* Notification Access */}
+          {showNotifAccess && (
+            <section>
+              <label style={sectionLabel}>Notification Access</label>
+              <div
+                onClick={() => setPerms((p) => ({ ...p, notificationAccess: !p.notificationAccess }))}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "14px 16px", borderRadius: 11, cursor: "pointer",
+                  background: perms.notificationAccess ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${perms.notificationAccess ? "rgba(99,102,241,0.35)" : "rgba(255,255,255,0.05)"}`,
+                  transition: "all 0.15s",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>🔔</span>
+                  <div>
+                    <div style={{ color: perms.notificationAccess ? "#a5b4fc" : "#94a3b8", fontWeight: 700, fontSize: 13 }}>
+                      Upcoming Interaction Alerts
+                    </div>
+                    <div style={{ color: "#334155", fontSize: 11, marginTop: 1 }}>
+                      Show 48-hour interaction notifications
+                    </div>
+                  </div>
+                </div>
+                {/* Toggle */}
+                <button
+                  className="acl-toggle"
+                  style={{
+                    background: perms.notificationAccess ? "rgba(99,102,241,0.2)" : "rgba(100,116,139,0.12)",
+                    cursor: "pointer",
+                    boxShadow: perms.notificationAccess ? "0 0 0 1px rgba(99,102,241,0.2) inset" : "none",
+                  }}
+                >
+                  <div className="acl-toggle-thumb" style={{
+                    background: perms.notificationAccess ? "#6366f1" : "#334155",
+                    transform: perms.notificationAccess ? "translateX(18px)" : "translateX(0)",
+                    boxShadow: perms.notificationAccess ? "0 0 8px rgba(99,102,241,0.6)" : "none",
+                  }} />
+                </button>
+              </div>
+              {perms.notificationAccess && (
+                <p style={{ color: "#475569", fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+                  ✅ User will see the notification bell with upcoming 48h interaction alerts.
+                </p>
+              )}
+            </section>
+          )}
 
           {/* Modules */}
           {showModules && (
@@ -553,7 +623,7 @@ function AddUserModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     fullName: "", email: "", phone: "", password: "", age: "",
     role: "data_entry",
-    permissions: { allowedModules: [], allowedActions: ["view", "add"], hiddenFields: [], dateFrom: "", dateTo: "" },
+    permissions: { allowedModules: [], allowedActions: ["view", "add"], hiddenFields: [], notificationAccess: false, dateFrom: "", dateTo: "" },
   });
   const [saving, setSaving] = useState(false);
   const [showPw, setShowPw] = useState(false);
@@ -601,7 +671,6 @@ function AddUserModal({ onClose, onCreated }) {
         borderRadius: 20, width: "min(500px, 100%)", maxHeight: "92vh",
         overflowY: "auto", padding: 0,
       }}>
-        {/* Modal Header */}
         <div style={{ padding: "22px 26px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ color: "#6366f1", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>Access Control</div>
@@ -652,7 +721,7 @@ function AddUserModal({ onClose, onCreated }) {
 
           <div style={{ padding: "12px", background: "rgba(99,102,241,0.05)", borderRadius: 10, border: "1px solid rgba(99,102,241,0.1)" }}>
             <p style={{ color: "#475569", fontSize: 11.5, margin: 0, lineHeight: 1.5 }}>
-              💡 Detailed permissions can be configured after user creation via the <strong style={{ color: "#6366f1" }}>Edit</strong> button.
+              💡 Detailed permissions (modules, actions, notification access) can be configured after creation via the <strong style={{ color: "#6366f1" }}>Edit</strong> button.
             </p>
           </div>
 
@@ -710,6 +779,7 @@ function DeleteModal({ target, onCancel, onConfirm, loading }) {
   );
 }
 
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AccessControlPage() {
   const navigate = useNavigate();
   const { user: me, isFullAdmin } = useAuthStore();
@@ -743,7 +813,6 @@ export default function AccessControlPage() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  // Stats
   const stats = {
     total:         users.length,
     full_admin:    users.filter(STAT_FILTERS.full_admin).length,
@@ -759,7 +828,6 @@ export default function AccessControlPage() {
     setTimeout(() => searchRef.current?.focus(), 50);
   };
 
-  // Filtered
   const filtered = users.filter((u) => {
     if (!STAT_FILTERS[activeFilter]?.(u)) return false;
     if (!search.trim()) return true;
@@ -773,7 +841,6 @@ export default function AccessControlPage() {
     );
   });
 
-  // Toggle status
   const handleToggleStatus = async (u) => {
     if (u._id === me?._id) return;
     setTogglingId(u._id);
@@ -788,7 +855,6 @@ export default function AccessControlPage() {
     }
   };
 
-  // Delete
   const handleDelete = async (u) => {
     setDeleting(true);
     try {
@@ -815,10 +881,10 @@ export default function AccessControlPage() {
       {editUser     && <PermissionPanel user={editUser} onClose={() => setEditUser(null)} onSaved={fetchUsers} />}
       {deleteTarget && <DeleteModal target={deleteTarget} loading={deleting} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />}
 
-      <div style={{ maxWidth: 1500, margin: "0 auto", padding: "32px 24px 100px" }}>
+      <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 16px 80px" }}>
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
               <div style={{ width: 3, height: 16, borderRadius: 99, background: "linear-gradient(180deg, #6366f1, transparent)" }} />
@@ -826,7 +892,7 @@ export default function AccessControlPage() {
                 Full Admin · Access Control
               </span>
             </div>
-            <h1 style={{ color: "#f1f5f9", fontSize: 28, fontWeight: 800, margin: 0, letterSpacing: "-0.03em" }}>
+            <h1 style={{ color: "#f1f5f9", fontSize: "clamp(20px, 4vw, 28px)", fontWeight: 800, margin: 0, letterSpacing: "-0.03em" }}>
               User Management
             </h1>
             <p style={{ color: "#334155", fontSize: 12.5, margin: "5px 0 0" }}>
@@ -838,12 +904,13 @@ export default function AccessControlPage() {
             onClick={() => setShowAdd(true)}
             style={{
               display: "flex", alignItems: "center", gap: 8,
-              padding: "11px 22px", borderRadius: 12, border: "none", cursor: "pointer",
+              padding: "10px 20px", borderRadius: 12, border: "none", cursor: "pointer",
               background: "linear-gradient(135deg,#4f46e5,#6366f1)",
-              color: "#fff", fontSize: 13.5, fontWeight: 700,
+              color: "#fff", fontSize: 13, fontWeight: 700,
               fontFamily: "'DM Sans', sans-serif",
               boxShadow: "0 4px 24px rgba(99,102,241,0.32)",
-              transition: "transform 0.15s, box-shadow 0.15s, opacity 0.15s",
+              transition: "transform 0.15s, box-shadow 0.15s",
+              whiteSpace: "nowrap",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 32px rgba(99,102,241,0.4)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)";    e.currentTarget.style.boxShadow = "0 4px 24px rgba(99,102,241,0.32)"; }}
@@ -854,8 +921,8 @@ export default function AccessControlPage() {
         </div>
 
         {/* ── Stat Cards ──────────────────────────────────────────────────── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
-          {STAT_CARDS.map((s, i) => (
+        <div className="acl-stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 20 }}>
+          {STAT_CARDS.map((s) => (
             <StatCard
               key={s.key}
               label={s.label}
@@ -907,11 +974,11 @@ export default function AccessControlPage() {
           </span>
         </div>
 
-        {/* ── Table ───────────────────────────────────────────────────────── */}
-        <div style={{ background: "#111119", border: "1px solid rgba(255,255,255,0.055)", borderRadius: 16, overflow: "hidden" }}>
+        {/* ── Table (responsive wrapper) ──────────────────────────────────── */}
+        <div className="acl-table-wrap" style={{ background: "#111119", border: "1px solid rgba(255,255,255,0.055)", borderRadius: 16, overflow: "hidden" }}>
 
           {/* Table Header */}
-          <div style={{
+          <div className="acl-table-header" style={{
             display: "grid",
             gridTemplateColumns: "2fr 1.6fr 1fr 1.3fr 1.3fr 80px 110px",
             padding: "10px 24px", alignItems: "center",
@@ -924,11 +991,7 @@ export default function AccessControlPage() {
           </div>
 
           {/* Loading Skeletons */}
-          {loading && (
-            <>
-              {[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}
-            </>
-          )}
+          {loading && [...Array(5)].map((_, i) => <SkeletonRow key={i} />)}
 
           {/* Empty State */}
           {!loading && filtered.length === 0 && (
@@ -953,13 +1016,14 @@ export default function AccessControlPage() {
             const isMe            = u._id === me?._id;
             const mods            = u.permissions?.allowedModules ?? [];
             const acts            = u.permissions?.allowedActions ?? [];
+            const hasNotifAccess  = u.permissions?.notificationAccess === true;
             const isFullAdminUser = u.role === "admin" || u.role === "full_admin";
             const toggling        = togglingId === u._id;
 
             return (
               <div
                 key={u._id}
-                className="acl-row"
+                className="acl-row acl-table-row"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "2fr 1.6fr 1fr 1.3fr 1.3fr 80px 110px",
@@ -974,10 +1038,13 @@ export default function AccessControlPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 11, paddingRight: 14, minWidth: 0 }}>
                   <Avatar user={u} size={36} />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ color: "#e2e8f0", fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.fullName}</span>
+                    <div style={{ color: "#e2e8f0", fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>{u.fullName}</span>
                       {isMe && (
                         <span style={{ color: "#6366f1", fontSize: 9, fontWeight: 800, background: "rgba(99,102,241,0.14)", padding: "1px 6px", borderRadius: 99, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>YOU</span>
+                      )}
+                      {hasNotifAccess && !isFullAdminUser && (
+                        <span title="Notification Access" style={{ fontSize: 11, flexShrink: 0 }}>🔔</span>
                       )}
                     </div>
                     <div style={{ color: "#1e293b", fontSize: 11, marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
@@ -1049,7 +1116,7 @@ export default function AccessControlPage() {
                   </button>
                 </div>
 
-                {/* Actions */}
+                {/* Edit / Delete */}
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   <button className="acl-btn-edit" onClick={() => setEditUser(u)}>
                     <span style={{ fontSize: 11 }}>✏️</span> Edit
@@ -1066,7 +1133,7 @@ export default function AccessControlPage() {
           {!loading && filtered.length > 0 && (
             <div style={{
               padding: "10px 24px", borderTop: "1px solid rgba(255,255,255,0.035)",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
+              display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
               background: "rgba(255,255,255,0.01)",
             }}>
               <span style={{ color: "#1e293b", fontSize: 11.5, fontFamily: "'JetBrains Mono', monospace" }}>

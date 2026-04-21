@@ -1,5 +1,5 @@
 // ─── admin/components/DataTable.jsx ──────────────────────────────────────────
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { fmtDate, shortId } from "../helpers.js";
 import { StatusBadge, TypeBadge, HighlightText } from "./ui.jsx";
 
@@ -10,12 +10,27 @@ export default function DataTable({
   selectedIds, onToggleAll, onToggleRow,
   onView, onEdit, onDelete,
   onPageChange,
+  onViewInteractions,
+  onAddInteraction,
+  highlightId,          // ← new: _id of row to visually highlight (from notifications)
 }) {
   const [hoveredRow, setHoveredRow] = useState(null);
+  const highlightRef = useRef(null);
+
+  // Auto-scroll to highlighted row
+  useEffect(() => {
+    if (highlightId && highlightRef.current) {
+      setTimeout(() => {
+        highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    }
+  }, [highlightId, data]);
 
   const allPageIds  = data.map((r) => r._id);
   const allSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
   const someSelected = allPageIds.some((id) => selectedIds.has(id)) && !allSelected;
+
+  const showInteractionCol = category.id === "organisation";
 
   const getCellDisplay = (row, col) => {
     const v = row[col.key];
@@ -40,13 +55,74 @@ export default function DataTable({
       : <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke={category.accent} strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>;
   };
 
+  // ── Interaction cell ──────────────────────────────────────────────────────
+  const InteractionCell = ({ row }) => {
+    const hasHistory = Array.isArray(row.interactions) && row.interactions.length > 0;
+    const count      = row.interactions?.length ?? 0;
+
+    // Check if this row has an upcoming interaction
+    const hasUpcoming = Array.isArray(row.interactions) && row.interactions.some((i) => {
+      if (!i.nextInteractionDate) return false;
+      const now  = Date.now();
+      const d    = new Date(i.nextInteractionDate).getTime();
+      return d >= now && d <= now + 48 * 60 * 60 * 1000;
+    });
+
+    return (
+      <div className="flex items-center gap-1">
+        <button
+          onClick={(e) => { e.stopPropagation(); onViewInteractions?.(row); }}
+          title="View interaction history"
+          className="relative flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all border"
+          style={{
+            background:  hasHistory ? `${category.accent}12` : "transparent",
+            color:       hasHistory ? category.accent         : "#334155",
+            borderColor: hasHistory ? `${category.accent}30` : "#1e293b",
+          }}
+        >
+          {/* Upcoming indicator dot */}
+          {hasUpcoming && (
+            <span
+              className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
+              style={{ background: "#f59e0b", boxShadow: "0 0 6px rgba(245,158,11,0.7)" }}
+            />
+          )}
+          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          {count > 0 ? count : "—"}
+        </button>
+
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddInteraction?.(row); }}
+          title="Add new interaction"
+          className="flex items-center justify-center w-6 h-6 rounded-lg border transition-all"
+          style={{ background: "transparent", color: "#475569", borderColor: "#1e293b" }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background   = `${category.accent}15`;
+            e.currentTarget.style.color        = category.accent;
+            e.currentTarget.style.borderColor  = `${category.accent}40`;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background   = "transparent";
+            e.currentTarget.style.color        = "#475569";
+            e.currentTarget.style.borderColor  = "#1e293b";
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+          </svg>
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-[#13131f] border border-slate-800 rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full min-w-max">
           <thead>
             <tr className="border-b border-slate-800">
-              {/* Select-all checkbox */}
               <th className="pl-4 pr-2 py-3 w-10">
                 <button
                   onClick={onToggleAll}
@@ -73,6 +149,17 @@ export default function DataTable({
                 </th>
               ))}
 
+              {showInteractionCol && (
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
+                  <div className="flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Interactions
+                  </div>
+                </th>
+              )}
+
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
                 Actions
               </th>
@@ -91,6 +178,11 @@ export default function DataTable({
                     <div className="h-3 bg-slate-800/80 rounded-full animate-pulse" style={{ width: `${40 + Math.random() * 45}%` }} />
                   </td>
                 ))}
+                {showInteractionCol && (
+                  <td className="px-4 py-3.5">
+                    <div className="h-5 w-16 bg-slate-800/80 rounded-lg animate-pulse" />
+                  </td>
+                )}
                 <td className="px-4 py-3.5">
                   <div className="h-3 w-14 bg-slate-800/80 rounded-full animate-pulse ml-auto" />
                 </td>
@@ -100,7 +192,7 @@ export default function DataTable({
             {/* Empty state */}
             {!loading && data.length === 0 && (
               <tr>
-                <td colSpan={category.columns.length + 2} className="text-center py-20">
+                <td colSpan={category.columns.length + (showInteractionCol ? 3 : 2)} className="text-center py-20">
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
                       style={{ background: `${category.accent}10`, border: `1px solid ${category.accent}20` }}>
@@ -114,71 +206,87 @@ export default function DataTable({
             )}
 
             {/* Data rows */}
-            {!loading && data.map((row) => (
-              <tr
-                key={row._id}
-                className="border-b border-slate-800/30 cursor-pointer group transition-colors"
-                style={{
-                  background: selectedIds.has(row._id)
-                    ? `${category.accent}10`
-                    : hoveredRow === row._id ? `${category.accent}07` : "transparent",
-                }}
-                onMouseEnter={() => setHoveredRow(row._id)}
-                onMouseLeave={() => setHoveredRow(null)}
-                onClick={() => onView(row)}>
+            {!loading && data.map((row) => {
+              const isHighlighted = highlightId && String(row._id) === String(highlightId);
 
-                {/* Row checkbox */}
-                <td className="pl-4 pr-2 py-3 w-10" onClick={(e) => { e.stopPropagation(); onToggleRow(row._id); }}>
-                  <div
-                    className="w-4 h-4 rounded flex items-center justify-center transition-all"
-                    style={{
-                      background: selectedIds.has(row._id) ? category.accent : "transparent",
-                      border: `1.5px solid ${selectedIds.has(row._id) ? category.accent : "#1e293b"}`,
-                    }}>
-                    {selectedIds.has(row._id) && (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#fff" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-                      </svg>
-                    )}
-                  </div>
-                </td>
+              return (
+                <tr
+                  key={row._id}
+                  ref={isHighlighted ? highlightRef : null}
+                  className="border-b border-slate-800/30 cursor-pointer group transition-colors"
+                  style={{
+                    background: isHighlighted
+                      ? "rgba(245,158,11,0.07)"
+                      : selectedIds.has(row._id)
+                        ? `${category.accent}10`
+                        : hoveredRow === row._id ? `${category.accent}07` : "transparent",
+                    boxShadow: isHighlighted ? "inset 3px 0 0 #f59e0b" : "none",
+                    transition: "background 0.2s, box-shadow 0.2s",
+                  }}
+                  onMouseEnter={() => setHoveredRow(row._id)}
+                  onMouseLeave={() => setHoveredRow(null)}
+                  onClick={() => onView(row)}>
 
-                {category.columns.map((col) => (
-                  <td key={col.key} className="px-4 py-3 max-w-[220px]">
-                    <div className="truncate">{getCellDisplay(row, col)}</div>
+                  {/* Row checkbox */}
+                  <td className="pl-4 pr-2 py-3 w-10" onClick={(e) => { e.stopPropagation(); onToggleRow(row._id); }}>
+                    <div
+                      className="w-4 h-4 rounded flex items-center justify-center transition-all"
+                      style={{
+                        background: selectedIds.has(row._id) ? category.accent : "transparent",
+                        border: `1.5px solid ${selectedIds.has(row._id) ? category.accent : "#1e293b"}`,
+                      }}>
+                      {selectedIds.has(row._id) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#fff" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                      )}
+                    </div>
                   </td>
-                ))}
 
-                {/* Action buttons */}
-                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                  <div className={`flex items-center justify-end gap-1 transition-opacity duration-100 ${hoveredRow === row._id ? "opacity-100" : "opacity-0"}`}>
-                    <button onClick={() => onView(row)} title="View"
-                      className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-slate-700/50 transition-all">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                      </svg>
-                    </button>
-                    {onEdit && (
-                      <button onClick={() => onEdit(row)} title="Edit"
-                        className="p-1.5 rounded-lg hover:bg-indigo-500/15 transition-all" style={{ color: category.accent }}>
+                  {category.columns.map((col) => (
+                    <td key={col.key} className="px-4 py-3 max-w-[220px]">
+                      <div className="truncate">{getCellDisplay(row, col)}</div>
+                    </td>
+                  ))}
+
+                  {/* Interaction column */}
+                  {showInteractionCol && (
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <InteractionCell row={row} />
+                    </td>
+                  )}
+
+                  {/* Action buttons */}
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className={`flex items-center justify-end gap-1 transition-opacity duration-100 ${hoveredRow === row._id || isHighlighted ? "opacity-100" : "opacity-0"}`}>
+                      <button onClick={() => onView(row)} title="View"
+                        className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-slate-700/50 transition-all">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                         </svg>
                       </button>
-                    )}
-                    {onDelete && (
-                      <button onClick={() => onDelete(row)} title="Delete"
-                        className="p-1.5 rounded-lg text-red-600 hover:text-red-400 hover:bg-red-500/15 transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {onEdit && (
+                        <button onClick={() => onEdit(row)} title="Edit"
+                          className="p-1.5 rounded-lg hover:bg-indigo-500/15 transition-all" style={{ color: category.accent }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                          </svg>
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button onClick={() => onDelete(row)} title="Delete"
+                          className="p-1.5 rounded-lg text-red-600 hover:text-red-400 hover:bg-red-500/15 transition-all">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -200,10 +308,10 @@ export default function DataTable({
 
               {Array.from({ length: Math.min(5, pages) }, (_, i) => {
                 let p;
-                if (pages <= 5)           p = i + 1;
-                else if (page <= 3)       p = i + 1;
+                if (pages <= 5)             p = i + 1;
+                else if (page <= 3)         p = i + 1;
                 else if (page >= pages - 2) p = pages - 4 + i;
-                else                      p = page - 2 + i;
+                else                        p = page - 2 + i;
                 return (
                   <button key={p} onClick={() => onPageChange(p)}
                     className="w-7 h-7 rounded-lg text-xs font-semibold transition-all"

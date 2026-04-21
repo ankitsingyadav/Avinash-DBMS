@@ -39,26 +39,34 @@ const normaliseEmail = (raw, fallbackSlug = "record") => {
 const VALID_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
 
 // ─── Helper: safely merge dataScope $or with search $or ───────────────────────
-// data_entry produces _dataScope = { $or: [...] }
-// We must not clobber a search $or — use $and to combine both.
 const buildQuery = (dataScope, dateScope, searchOr, extraFilters = {}) => {
   const query = { ...dateScope, ...extraFilters };
-
   const ownerOr = dataScope?.$or ?? null;
 
   if (ownerOr && searchOr) {
-    query.$and = [
-      { $or: ownerOr },
-      { $or: searchOr },
-    ];
+    query.$and = [{ $or: ownerOr }, { $or: searchOr }];
   } else if (ownerOr) {
     query.$or = ownerOr;
   } else if (searchOr) {
     query.$or = searchOr;
   }
-
   return query;
 };
+
+// ── Helper: build interaction object from request body ────────────────────────
+const buildInteractionFromBody = (interaction) => ({
+  interactionBy:   String(interaction.interactionBy  || "").trim(),
+  interactedWith:  String(interaction.interactedWith || "").trim(),
+  interactionDate: interaction.interactionDate ? new Date(interaction.interactionDate) : new Date(),
+  interactionMode: VALID_MODES.includes(interaction.interactionMode)
+    ? interaction.interactionMode
+    : "Email",
+  notes:               interaction.notes?.trim()              || undefined,
+  ninAin:              interaction.ninAin?.trim()             || undefined,
+  nextInteractionDate: interaction.nextInteractionDate
+    ? new Date(interaction.nextInteractionDate)
+    : undefined,
+});
 
 // ── POST /api/v1/organisations ────────────────────────────────────────────────
 export const createOrganisation = asyncHandler(async (req, res) => {
@@ -81,7 +89,6 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     const hasCentreTypeScope = mods.some((m) => CENTRE_TYPES.includes(m));
 
     if (hasCentreTypeScope) {
-      // Scoped to specific centreTypes — verify
       if (!mods.includes(centreType) && !mods.includes("organisation")) {
         return sendError(res, 403, `You do not have access to create records for '${centreType}'.`);
       }
@@ -113,15 +120,8 @@ export const createOrganisation = asyncHandler(async (req, res) => {
           email:         normaliseEmail(c.email, centreName),
         };
       }),
-      interaction: {
-        interactionBy:       String(interaction.interactionBy  || "").trim(),
-        interactedWith:      String(interaction.interactedWith || "").trim(),
-        interactionDate:     interaction.interactionDate ? new Date(interaction.interactionDate) : new Date(),
-        interactionMode:     VALID_MODES.includes(interaction.interactionMode) ? interaction.interactionMode : "Email",
-        notes:               interaction.notes?.trim()              || undefined,
-        ninAin:              interaction.ninAin?.trim()             || undefined,
-        nextInteractionDate: interaction.nextInteractionDate ? new Date(interaction.nextInteractionDate) : undefined,
-      },
+      // Store as array — first entry in history
+      interactions: [buildInteractionFromBody(interaction)],
       onboardedBy:  String(onboardedBy).trim(),
       ninAin:       ninAin?.trim() || undefined,
       registeredBy: req.user._id,
@@ -137,6 +137,71 @@ export const createOrganisation = asyncHandler(async (req, res) => {
   }
 });
 
+// ── POST /api/v1/organisations/:id/interactions ───────────────────────────────
+// Add a new interaction entry to an existing organisation's history
+export const addInteraction = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { interactionBy, interactedWith, interactionDate, interactionMode } = req.body;
+
+  if (!interactionBy || !interactedWith || !interactionDate || !interactionMode)
+    return sendError(res, 422, "Missing required fields: interactionBy, interactedWith, interactionDate, interactionMode.");
+
+  if (!VALID_MODES.includes(interactionMode))
+    return sendError(res, 422, `Invalid interactionMode. Must be one of: ${VALID_MODES.join(", ")}.`);
+
+  // data_entry: verify ownership
+  if (req.user.role === "data_entry") {
+    const existing = await Organisation.findById(id).lean();
+    if (!existing) return sendError(res, 404, "Organisation not found.");
+    if (!verifyOwnRecord(existing, req.user._id))
+      return sendError(res, 403, "You can only edit records you created.");
+  }
+
+  const newEntry = buildInteractionFromBody(req.body);
+
+  try {
+    const organisation = await Organisation.findByIdAndUpdate(
+      id,
+      { $push: { interactions: newEntry } },
+      { new: true, runValidators: false }
+    );
+
+    if (!organisation) return sendError(res, 404, "Organisation not found.");
+
+    // Return the newly added interaction (last in array)
+    const added = organisation.interactions[organisation.interactions.length - 1];
+    return sendSuccess(res, 201, "Interaction added successfully.", {
+      interaction: added,
+      totalInteractions: organisation.interactions.length,
+    });
+  } catch (err) {
+    if (err.name === "ValidationError")
+      return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
+    throw err;
+  }
+});
+
+// ── GET /api/v1/organisations/:id/interactions ────────────────────────────────
+// Get full interaction history for an organisation (newest first)
+export const getInteractions = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const organisation = await Organisation.findById(id)
+    .select("interactions centreName")
+    .lean();
+
+  if (!organisation) return sendError(res, 404, "Organisation not found.");
+
+  // Return newest first
+  const history = [...(organisation.interactions || [])].reverse();
+
+  return sendSuccess(res, 200, "Interactions retrieved successfully.", {
+    centreName:   organisation.centreName,
+    interactions: history,
+    total:        history.length,
+  });
+});
+
 // ── POST /api/v1/organisations/bulk ──────────────────────────────────────────
 export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
   const { records } = req.body;
@@ -149,6 +214,18 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
   const sanitised = records.map((r) => {
     const slug     = String(r.centreName || r.name || "record").toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 24);
     const district = String(r.district || r.city || "Unknown District").trim();
+
+    const interactionEntry = {
+      interactionBy:  String(r.interactionBy  || r.onboardedBy || "System Import").trim(),
+      interactedWith: String(r.interactedWith || r.contactPerson || r.name || r.centreName || "Administrator").trim(),
+      interactionDate: r.interactionDate ? new Date(r.interactionDate) : new Date(),
+      interactionMode: VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
+      notes:           String(r.notes || "Imported via bulk upload").trim(),
+      ninAin:          String(r.ninAin || r.interactionNinAin || "").trim() || `IMPORT-${slug.toUpperCase().slice(0, 10)}`,
+      ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
+        ? { nextInteractionDate: new Date(r.nextInteractionDate) }
+        : {}),
+    };
 
     return {
       centreType:  String(r.centreType || "").trim(),
@@ -165,19 +242,7 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
         contactNumber: String(r.phone || r.mobile || r.contactNumber || "9999999999").trim(),
         email:         normaliseEmail(r.email, slug),
       }],
-      interaction: {
-        interactionBy:  String(r.interactionBy  || r.onboardedBy || "System Import").trim(),
-        interactedWith: String(
-          r.interactedWith || r.contactPerson || r.name || r.centreName || "Administrator"
-        ).trim(),
-        interactionDate: r.interactionDate ? new Date(r.interactionDate) : new Date(),
-        interactionMode: VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
-        notes:           String(r.notes || "Imported via bulk upload").trim(),
-        ninAin:          String(r.ninAin || r.interactionNinAin || "").trim() || `IMPORT-${slug.toUpperCase().slice(0, 10)}`,
-        ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
-          ? { nextInteractionDate: new Date(r.nextInteractionDate) }
-          : {}),
-      },
+      interactions: [interactionEntry],
       onboardedBy:  String(r.onboardedBy || "System Import").trim(),
       ninAin:       String(r.ninAin || "").trim() || `NIN-IMPORT-${slug.toUpperCase().slice(0, 10)}`,
       registeredBy: req.user._id,
@@ -258,16 +323,13 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
   const dataScope = req._dataScope || {};
   const dateScope = req._dateScope || {};
 
-  // Extra filters built up first (before $or merging)
   const extraFilters = {};
 
-  // partial_admin: scope to their allowed centreTypes if applicable
   if (req.user.role === "partial_admin") {
     const mods = req.user.permissions?.allowedModules ?? [];
     const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
     const centreTypes = mods.filter((m) => CENTRE_TYPES.includes(m));
     if (centreTypes.length > 0) {
-      // If user also passed a centreType filter, intersect it
       if (centreType && centreTypes.includes(centreType)) {
         extraFilters.centreType = centreType;
       } else {
@@ -285,7 +347,6 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
   if (district) extraFilters.district = district;
   if (city)     extraFilters.city     = city;
 
-  // Build search $or
   let searchOr = null;
   if (search && search.trim()) {
     const regex     = { $regex: search.trim(), $options: "i" };
@@ -306,19 +367,18 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
   }
 
   const query = buildQuery(dataScope, dateScope, searchOr, extraFilters);
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const skip  = (parseInt(page) - 1) * parseInt(limit);
 
   const [organisations, total] = await Promise.all([
     Organisation.find(query)
       .sort(buildSort(sortField, sortDir))
       .skip(skip)
       .limit(parseInt(limit))
-      .lean(),
+      .lean({ virtuals: true }),
     Organisation.countDocuments(query),
   ]);
 
-  const hidden = getHiddenFields(req);
+  const hidden  = getHiddenFields(req);
   const safeOrgs = stripHiddenFields(organisations, hidden);
 
   return sendSuccess(res, 200, "Organisations retrieved successfully.", {
@@ -335,12 +395,11 @@ export const getOrganisationById = asyncHandler(async (req, res) => {
     .populate("registeredBy", "fullName email");
   if (!organisation) return sendError(res, 404, "Organisation not found.");
 
-  // data_entry: verify ownership
   if (req.user.role === "data_entry" && !verifyOwnRecord(organisation, req.user._id)) {
     return sendError(res, 403, "You can only view records you created.");
   }
 
-  const hidden = getHiddenFields(req);
+  const hidden  = getHiddenFields(req);
   const safeOrg = stripHiddenFields(organisation.toObject(), hidden);
 
   return sendSuccess(res, 200, "Organisation retrieved successfully.", { organisation: safeOrg });
@@ -359,7 +418,9 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
   const allowed = [
     "centreType", "centreName", "website", "address",
     "city", "district", "state", "pincode",
-    "contacts", "onboardedBy", "ninAin", "status", "interaction",
+    "contacts", "onboardedBy", "ninAin", "status",
+    // Note: 'interaction' (singular) in EditModal body → update latest entry
+    "interaction",
   ];
   const updates = {};
   allowed.forEach((f) => {
@@ -369,10 +430,33 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
   if (updates.pincode) updates.pincode = normalisePincode(updates.pincode);
   if (updates.website) updates.website = normaliseWebsite(updates.website);
 
+  // If interaction (singular) is sent, update the last element in interactions[]
+  // This preserves backward compat with EditModal which sends `interaction` key
+  const mongoUpdate = { $set: {} };
+
+  if (updates.interaction) {
+    const interactionData = updates.interaction;
+    delete updates.interaction;
+
+    // We need to know current interactions length to target last index
+    // Use $push to always add as latest, OR update via positional — simplest:
+    // Just $push a new entry so history is preserved
+    mongoUpdate.$push = {
+      interactions: buildInteractionFromBody(interactionData),
+    };
+  }
+
+  // All other scalar updates
+  Object.keys(updates).forEach((k) => {
+    mongoUpdate.$set[k] = updates[k];
+  });
+
+  if (Object.keys(mongoUpdate.$set).length === 0) delete mongoUpdate.$set;
+
   try {
     const organisation = await Organisation.findByIdAndUpdate(
       req.params.id,
-      { $set: updates },
+      mongoUpdate,
       { new: true, runValidators: true, context: "query" }
     );
     if (!organisation) return sendError(res, 404, "Organisation not found.");

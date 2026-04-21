@@ -1,5 +1,6 @@
-// controllers/organisation.controller.js  (volunteers)
+// controllers/organisation.controller.js
 import Volunteer from "../models/volunteer.model.js";
+import Organisation from "../models/organisation.model.js";
 import { asyncHandler, sendSuccess, sendError } from "../utils/response.utils.js";
 import {
   getHiddenFields,
@@ -122,32 +123,19 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
     status, state, district, area_of_interest,
   } = req.query;
 
-  // ── Permission scoping ──────────────────────────────────────────────────────
-  // _dataScope comes from applyDataScope middleware
-  // _dateScope comes from applyDateRangeScope middleware
-  //
-  // FIX: _dataScope is now { $or: [...] } for data_entry, or {} for others.
-  // We must merge it carefully into the query without clobbering a search $or.
   const dataScope = req._dataScope || {};
   const dateScope = req._dateScope || {};
 
-  // Explicit date filter from query takes precedence over permission date window
   const dateFilter = (dateFrom || dateTo)
     ? buildDateFilter(dateFrom, dateTo)
     : dateScope;
 
-  // Start with date and data scope
-  // Note: if dataScope has $or, we wrap everything in $and to avoid conflicts
-  // with the search $or below
   let query = { ...dateFilter };
 
-  // Apply data_entry ownership scope
   if (dataScope.$or) {
-    // Will be added to $and array below alongside search
     query._ownerScope = dataScope.$or;
   }
 
-  // Build search $or
   let searchOr = null;
   if (search && search.trim()) {
     const regex = { $regex: search.trim(), $options: "i" };
@@ -164,7 +152,6 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
     ];
   }
 
-  // Merge $or clauses safely using $and
   if (query._ownerScope && searchOr) {
     query.$and = [
       { $or: query._ownerScope },
@@ -210,7 +197,6 @@ export const getVolunteerById = asyncHandler(async (req, res) => {
     .populate("registered_by", "fullName email");
   if (!volunteer) return sendError(res, 404, "Volunteer not found.");
 
-  // data_entry: verify ownership
   if (req.user.role === "data_entry" && !verifyOwnRecord(volunteer, req.user._id)) {
     return sendError(res, 403, "You can only view records you created.");
   }
@@ -267,4 +253,106 @@ export const deleteVolunteer = asyncHandler(async (req, res) => {
   const volunteer = await Volunteer.findByIdAndDelete(req.params.id);
   if (!volunteer) return sendError(res, 404, "Volunteer not found.");
   return sendSuccess(res, 200, "Volunteer deleted successfully.");
+});
+
+// ── GET /organisations/upcoming-interactions ──────────────────────────────────
+// FIX: startOfToday use karo taaki date-only records (00:00 UTC) bhi include hon
+export const getUpcomingInteractions = asyncHandler(async (req, res) => {
+  const now = new Date();
+
+  // Aaj ke din ka start (00:00:00.000) — date-only stored values ke liye zaroori
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  // Aaj se 48 ghante aage tak
+  const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  const query = {
+    "interactions.nextInteractionDate": {
+      $gte: startOfToday, // ← fix: now ki jagah startOfToday
+      $lte: in48h,
+    },
+  };
+
+  // data_entry: sirf apne records
+  if (req.user.role === "data_entry") {
+    query.registeredBy = req.user._id;
+  }
+
+  // partial_admin: allowed centreTypes ke hisaab se filter
+  if (req.user.role === "partial_admin") {
+    const mods = req.user.permissions?.allowedModules ?? [];
+    const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
+    const ctMods = mods.filter((m) => CENTRE_TYPES.includes(m));
+    if (ctMods.length > 0 && !mods.includes("organisation")) {
+      query.centreType = { $in: ctMods };
+    }
+  }
+
+  const orgs = await Organisation.find(query)
+    .select("centreName centreType interactions")
+    .lean({ virtuals: false });
+
+  // Flatten: har qualifying interaction entry ke liye ek notification
+  const interactions = [];
+
+  for (const org of orgs) {
+    const entries = org.interactions || [];
+    entries.forEach((entry, idx) => {
+      if (!entry.nextInteractionDate) return;
+      const d = new Date(entry.nextInteractionDate);
+
+      // FIX: startOfToday se compare karo, sirf in48h tak
+      if (d >= startOfToday && d <= in48h) {
+        interactions.push({
+          _id:                 org._id,
+          centreName:          org.centreName,
+          centreType:          org.centreType,
+          interactionIndex:    idx,
+          interactionMode:     entry.interactionMode,
+          interactedWith:      entry.interactedWith,
+          interactionBy:       entry.interactionBy,
+          notes:               entry.notes,
+          nextInteractionDate: entry.nextInteractionDate,
+          interactionDate:     entry.interactionDate,
+        });
+      }
+    });
+  }
+
+  // nextInteractionDate ascending sort (sabse urgent pehle)
+  interactions.sort((a, b) => new Date(a.nextInteractionDate) - new Date(b.nextInteractionDate));
+
+  return sendSuccess(res, 200, "Upcoming interactions retrieved successfully.", {
+    interactions,
+    total: interactions.length,
+  });
+});
+
+// ── POST /organisations/:id/interactions/cancel ───────────────────────────────
+export const cancelNextInteraction = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { interactionIndex } = req.body;
+
+  if (interactionIndex === undefined || interactionIndex === null) {
+    return sendError(res, 422, "interactionIndex is required.");
+  }
+
+  const org = await Organisation.findById(id);
+  if (!org) return sendError(res, 404, "Organisation not found.");
+
+  // data_entry: ownership verify karo
+  if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id)) {
+    return sendError(res, 403, "You can only edit records you created.");
+  }
+
+  const entry = org.interactions[interactionIndex];
+  if (!entry) return sendError(res, 404, "Interaction entry not found.");
+
+  // nextInteractionDate clear karo — interaction "cancelled"
+  org.interactions[interactionIndex].nextInteractionDate = undefined;
+  org.markModified("interactions");
+  await org.save({ validateBeforeSave: false });
+
+  return sendSuccess(res, 200, "Next interaction date cancelled successfully.");
 });

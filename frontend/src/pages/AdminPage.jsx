@@ -1,4 +1,11 @@
 // ─── pages/AdminPage.jsx ─────────────────────────────────────────────────────
+// KEY CHANGES:
+//  1. Reads ?filter=upcoming from URL params (set by NotificationsPage "View" click)
+//  2. When filter=upcoming is active, fetches only orgs with nextInteractionDate
+//     in next 48h from client-side — uses a derived "upcomingOnly" overlay on
+//     the existing data (no new API endpoint needed; server already supports it).
+//  3. Adds an "Upcoming Interactions" highlighted banner/filter bar when active.
+
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "../utils/axios.js";
@@ -7,19 +14,28 @@ import toast from "react-hot-toast";
 import Navbar       from "../components/Navbar";
 import ConfirmModal from "../components/ConfirmModal";
 
-import { CATEGORIES }     from "../admin/constants.js";
-import { CATEGORY_ICONS } from "../admin/icons.jsx";
-import { useDebounce }    from "../admin/helpers.js";
-import FilterDropdown     from "../admin/components/FilterDropdown.jsx";
-import EditModal          from "../admin/components/EditModal.jsx";
-import ViewModal          from "../admin/components/ViewModal.jsx";
-import ImportModal        from "../admin/components/ImportModal.jsx";
-import DataTable          from "../admin/components/DataTable.jsx";
+import { CATEGORIES }              from "../admin/constants.js";
+import { CATEGORY_ICONS }          from "../admin/icons.jsx";
+import { useDebounce }             from "../admin/helpers.js";
+import FilterDropdown              from "../admin/components/FilterDropdown.jsx";
+import EditModal                   from "../admin/components/EditModal.jsx";
+import ViewModal                   from "../admin/components/ViewModal.jsx";
+import ImportModal                 from "../admin/components/ImportModal.jsx";
+import DataTable                   from "../admin/components/DataTable.jsx";
+import InteractionHistoryModal     from "../admin/components/InteractionHistoryModal.jsx";
 import useAuthStore, { roleHelpers } from "../context/authStore.js";
+import AddInteractionModal from "../admin/components/Addinteractionmodal.jsx";
 
 const ALL_CATS = CATEGORIES.map((c) => ({ ...c, icon: CATEGORY_ICONS[c.id] }));
 
-// ── URL ↔ state helpers ───────────────────────────────────────────────────────
+// ── helper: check if a nextInteractionDate is within 48h from now ─────────────
+const isUpcoming48h = (dateStr) => {
+  if (!dateStr) return false;
+  const now  = Date.now();
+  const d    = new Date(dateStr).getTime();
+  return d >= now && d <= now + 48 * 60 * 60 * 1000;
+};
+
 function readParams(params, category) {
   const filters = {};
   (category?.filters ?? []).forEach((f) => {
@@ -27,13 +43,15 @@ function readParams(params, category) {
     if (v) filters[f.key] = v;
   });
   return {
-    tab:       params.get("tab")       || "volunteer",
-    page:      parseInt(params.get("page") || "1", 10),
-    search:    params.get("search")    || "",
-    sortField: params.get("sortField") || "createdAt",
-    sortDir:   params.get("sortDir")   || "desc",
-    dateFrom:  params.get("dateFrom")  || "",
-    dateTo:    params.get("dateTo")    || "",
+    tab:             params.get("tab")       || "volunteer",
+    page:            parseInt(params.get("page") || "1", 10),
+    search:          params.get("search")    || "",
+    sortField:       params.get("sortField") || "createdAt",
+    sortDir:         params.get("sortDir")   || "desc",
+    dateFrom:        params.get("dateFrom")  || "",
+    dateTo:          params.get("dateTo")    || "",
+    highlight:       params.get("highlight") || "",
+    upcomingFilter:  params.get("filter") === "upcoming",
     filters,
   };
 }
@@ -43,15 +61,7 @@ export default function AdminPage() {
   const location  = useLocation();
   const navigate  = useNavigate();
 
-  // ── Auth store ─────────────────────────────────────────────────────────────
-  // FIX: Pull `user` directly from the store so all derived permission checks
-  // are recalculated whenever the user object changes (e.g. after login).
-  // Using the store's selector functions directly caused stale closures when
-  // the user was not yet loaded.
-  const authUser = useAuthStore((s) => s.user);
-
-  // Derive permission booleans from the current user using roleHelpers
-  // (pure functions — no closure risk)
+  const authUser    = useAuthStore((s) => s.user);
   const isFullAdmin = roleHelpers.isFullAdmin(authUser);
 
   const canAccess = useCallback(
@@ -67,9 +77,6 @@ export default function AdminPage() {
     [authUser]
   );
 
-  // ── Filtered category list for this user ──────────────────────────────────
-  // FIX: Previously depended on the store selector `canAccess` which could be
-  // stale. Now recalculated directly from authUser.
   const CATS = useMemo(() => {
     if (!authUser) return [];
     return ALL_CATS.filter((c) => roleHelpers.canAccess(authUser, c.id));
@@ -85,7 +92,6 @@ export default function AdminPage() {
     [isFieldHidden]
   );
 
-  // ── Derive initial state from URL ─────────────────────────────────────────
   const initialCat = useMemo(
     () => CATS.find((c) => c.id === (searchParams.get("tab") || "volunteer")) ?? CATS[0],
     [] // eslint-disable-line
@@ -105,6 +111,13 @@ export default function AdminPage() {
   const [filters,       setFilters]       = useState(initial.filters);
   const [dateFrom,      setDateFrom]      = useState(initial.dateFrom);
   const [dateTo,        setDateTo]        = useState(initial.dateTo);
+  const [highlightId,   setHighlightId]   = useState(initial.highlight);
+
+  // ── Upcoming Interactions filter ──────────────────────────────────────────
+  const [upcomingFilter, setUpcomingFilter] = useState(initial.upcomingFilter);
+  // Stores fetched upcoming interaction data from /upcoming-interactions
+  const [upcomingData,   setUpcomingData]   = useState([]);
+  const [upcomingLoading, setUpcomingLoading] = useState(false);
 
   const [editRecord,    setEditRecord]    = useState(null);
   const [viewRecord,    setViewRecord]    = useState(null);
@@ -112,26 +125,27 @@ export default function AdminPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showImport,    setShowImport]    = useState(false);
 
+  const [interactionHistoryRecord, setInteractionHistoryRecord] = useState(null);
+  const [addInteractionRecord,     setAddInteractionRecord]     = useState(null);
+
   const [selectedIds,           setSelectedIds]           = useState(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [bulkDeleteLoading,     setBulkDeleteLoading]     = useState(false);
 
   const abortRef = useRef(null);
 
-  // ── Category derived from tab ─────────────────────────────────────────────
   const category = useMemo(
     () => CATS.find((c) => c.id === activeTab) ?? CATS[0] ?? null,
     [activeTab, CATS]
   );
 
-  // ── If active tab is not accessible, switch to first available ────────────
   useEffect(() => {
     if (CATS.length > 0 && !CATS.find((c) => c.id === activeTab)) {
       setActiveTab(CATS[0].id);
     }
   }, [CATS, activeTab]);
 
-  // ── Sync URL whenever relevant state changes ───────────────────────────────
+  // ── Sync URL params ─────────────────────────────────────────────────────────
   useEffect(() => {
     const p = new URLSearchParams();
     p.set("tab", activeTab);
@@ -141,11 +155,12 @@ export default function AdminPage() {
     if (sortDir   !== "desc")          p.set("sortDir",   sortDir);
     if (dateFrom)                      p.set("dateFrom",  dateFrom);
     if (dateTo)                        p.set("dateTo",    dateTo);
+    if (highlightId)                   p.set("highlight", highlightId);
+    if (upcomingFilter)                p.set("filter",    "upcoming");
     Object.entries(filters).forEach(([k, v]) => { if (v) p.set(k, v); });
     setSearchParams(p, { replace: true });
-  }, [activeTab, page, search, sortField, sortDir, dateFrom, dateTo, filters]); // eslint-disable-line
+  }, [activeTab, page, search, sortField, sortDir, dateFrom, dateTo, filters, highlightId, upcomingFilter]); // eslint-disable-line
 
-  // ── Handle nav state from DashboardPage ───────────────────────────────────
   useEffect(() => {
     if (location.state?.tab)        setActiveTab(location.state.tab);
     if (location.state?.showImport) setShowImport(true);
@@ -155,11 +170,30 @@ export default function AdminPage() {
     }
   }, []); // eslint-disable-line
 
-  // ── Debounced search ──────────────────────────────────────────────────────
+  // ── Fetch upcoming interactions data ────────────────────────────────────────
+  const fetchUpcomingData = useCallback(async () => {
+    setUpcomingLoading(true);
+    try {
+      const res  = await axios.get("/organisations/upcoming-interactions");
+      const list = res.data?.data?.interactions || [];
+      setUpcomingData(list);
+    } catch {
+      setUpcomingData([]);
+    } finally {
+      setUpcomingLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (upcomingFilter && activeTab === "organisation") {
+      fetchUpcomingData();
+    }
+  }, [upcomingFilter, activeTab, fetchUpcomingData]);
+
   const debouncedSetSearch = useDebounce((val) => { setSearch(val); setPage(1); }, 600);
   const handleSearchInput = (val) => { setSearchInput(val); debouncedSetSearch(val); };
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Main data fetch ─────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     const cat = CATS.find((c) => c.id === activeTab);
     if (!cat) return;
@@ -190,16 +224,15 @@ export default function AdminPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
 
-  // ── Reset on tab switch ───────────────────────────────────────────────────
   useEffect(() => {
     setData([]); setTotal(0); setPages(1); setPage(1);
     setSearch(""); setSearchInput(""); setSortField("createdAt"); setSortDir("desc");
     setFilters({}); setDateFrom(""); setDateTo(""); setSelectedIds(new Set());
+    // Don't reset upcomingFilter when switching to org tab from elsewhere
   }, [activeTab]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [page, search, filters, dateFrom, dateTo]);
 
-  // ── Filter change handler ─────────────────────────────────────────────────
   const handleFilterChange = useCallback((key, val) => {
     setFilters((prev) => {
       const next = { ...prev, [key]: val };
@@ -211,7 +244,40 @@ export default function AdminPage() {
     setPage(1);
   }, [category]);
 
-  // ── Selection ─────────────────────────────────────────────────────────────
+  // ── Upcoming filter: derive displayed data ──────────────────────────────────
+  // When upcomingFilter is ON and tab is organisation, we overlay the upcoming
+  // data: show only records from the main `data` list whose _id appears in
+  // upcomingData. We also keep normal editing/viewing working.
+  const upcomingOrgIds = useMemo(
+    () => new Set(upcomingData.map((u) => String(u._id))),
+    [upcomingData]
+  );
+
+  const displayData  = upcomingFilter && activeTab === "organisation"
+    ? data.filter((r) => upcomingOrgIds.has(String(r._id)))
+    : data;
+
+  const displayTotal = upcomingFilter && activeTab === "organisation"
+    ? displayData.length
+    : total;
+
+  // ── Upcoming time helper for banner ─────────────────────────────────────────
+  const getUpcomingSummary = () => {
+    const now   = Date.now();
+    const in2h  = now + 2 * 60 * 60 * 1000;
+    const in48h = now + 48 * 60 * 60 * 1000;
+    const overdue  = upcomingData.filter((u) => new Date(u.nextInteractionDate) < now).length;
+    const critical = upcomingData.filter((u) => {
+      const d = new Date(u.nextInteractionDate).getTime();
+      return d >= now && d <= in2h;
+    }).length;
+    const upcoming = upcomingData.filter((u) => {
+      const d = new Date(u.nextInteractionDate).getTime();
+      return d > in2h && d <= in48h;
+    }).length;
+    return { overdue, critical, upcoming };
+  };
+
   const allPageIds = data.map((r) => r._id);
   const handleToggleAll = () => {
     const allSel = allPageIds.every((id) => selectedIds.has(id));
@@ -226,14 +292,12 @@ export default function AdminPage() {
   const handleToggleRow = (id) =>
     setSelectedIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  // ── Sort ──────────────────────────────────────────────────────────────────
   const handleSort = (field) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortField(field); setSortDir("asc"); }
     setPage(1);
   };
 
-  // ── Single delete ─────────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!deleteRecord || !category) return;
     setDeleteLoading(true);
@@ -246,7 +310,6 @@ export default function AdminPage() {
     } finally { setDeleteLoading(false); }
   };
 
-  // ── Bulk delete ───────────────────────────────────────────────────────────
   const handleBulkDelete = async () => {
     if (!category) return;
     setBulkDeleteLoading(true);
@@ -264,6 +327,17 @@ export default function AdminPage() {
     fetchData();
   };
 
+  const handleHistoryAddNew = () => {
+    const rec = interactionHistoryRecord;
+    setInteractionHistoryRecord(null);
+    setTimeout(() => setAddInteractionRecord(rec), 100);
+  };
+
+  const handleInteractionSaved = () => {
+    fetchData();
+    if (upcomingFilter) fetchUpcomingData();
+  };
+
   const activeFiltersCount =
     Object.values(filters).filter(Boolean).length + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0);
 
@@ -272,7 +346,11 @@ export default function AdminPage() {
     setSearch(""); setSearchInput(""); setPage(1);
   };
 
-  // ── No-access guard ───────────────────────────────────────────────────────
+  const disableUpcomingFilter = () => {
+    setUpcomingFilter(false);
+    setHighlightId("");
+  };
+
   if (!category) {
     return (
       <div className="min-h-screen bg-[#0c0c14]">
@@ -288,15 +366,33 @@ export default function AdminPage() {
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const upcomingSummary = upcomingFilter ? getUpcomingSummary() : null;
+
   return (
     <div className="min-h-screen bg-[#0c0c14]">
       <Navbar />
 
-      <EditModal   isOpen={!!editRecord}   onClose={() => setEditRecord(null)}   record={editRecord}   category={category} onSaved={fetchData} />
-      <ViewModal   isOpen={!!viewRecord}   onClose={() => setViewRecord(null)}   record={viewRecord}   category={category} onEdit={setEditRecord} onDelete={setDeleteRecord} />
-      <ImportModal isOpen={showImport}     onClose={() => setShowImport(false)}  onUploaded={fetchData} />
-
+      {/* ── Modals ── */}
+      <EditModal
+        isOpen={!!editRecord}
+        onClose={() => setEditRecord(null)}
+        record={editRecord}
+        category={category}
+        onSaved={fetchData}
+      />
+      <ViewModal
+        isOpen={!!viewRecord}
+        onClose={() => setViewRecord(null)}
+        record={viewRecord}
+        category={category}
+        onEdit={setEditRecord}
+        onDelete={setDeleteRecord}
+      />
+      <ImportModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onUploaded={fetchData}
+      />
       <ConfirmModal
         isOpen={!!deleteRecord}
         onCancel={() => setDeleteRecord(null)}
@@ -312,6 +408,20 @@ export default function AdminPage() {
         loading={bulkDeleteLoading}
         title={`Delete ${selectedIds.size} Records?`}
         message={`${selectedIds.size} selected records will be permanently deleted. This action cannot be undone.`}
+      />
+      <InteractionHistoryModal
+        isOpen={!!interactionHistoryRecord}
+        onClose={() => setInteractionHistoryRecord(null)}
+        record={interactionHistoryRecord}
+        category={category}
+        onAddNew={handleHistoryAddNew}
+      />
+      <AddInteractionModal
+        isOpen={!!addInteractionRecord}
+        onClose={() => setAddInteractionRecord(null)}
+        record={addInteractionRecord}
+        category={category}
+        onSaved={handleInteractionSaved}
       />
 
       <div className="max-w-[1500px] mx-auto px-4 sm:px-6 pt-7 pb-16">
@@ -379,11 +489,163 @@ export default function AdminPage() {
           })}
         </div>
 
-        {/* ── Filter bar ──────────────────────────────────────────────────── */}
+        {/* ── UPCOMING INTERACTIONS FILTER BANNER ───────────────────────────── */}
+        {upcomingFilter && activeTab === "organisation" && (
+          <div
+            className="mb-4 rounded-2xl border overflow-hidden"
+            style={{
+              background: "linear-gradient(135deg, rgba(245,158,11,0.06) 0%, rgba(239,68,68,0.04) 100%)",
+              borderColor: "rgba(245,158,11,0.25)",
+            }}
+          >
+            {/* Banner header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b"
+              style={{ borderColor: "rgba(245,158,11,0.15)" }}
+            >
+              <div className="flex items-center gap-3">
+                {/* Pulsing dot */}
+                <div className="relative flex items-center justify-center">
+                  <div
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ background: "#f59e0b", boxShadow: "0 0 8px rgba(245,158,11,0.7)" }}
+                  />
+                  <div
+                    className="absolute w-5 h-5 rounded-full"
+                    style={{
+                      background: "rgba(245,158,11,0.2)",
+                      animation: "ping 1.5s cubic-bezier(0,0,0.2,1) infinite",
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <span className="text-amber-400 text-sm font-bold tracking-tight">
+                    Upcoming Interactions Filter Active
+                  </span>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    Showing only centres with interactions scheduled in the next 48 hours
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Summary pills */}
+                {upcomingSummary && (
+                  <div className="flex items-center gap-2">
+                    {upcomingSummary.overdue > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.25)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
+                        {upcomingSummary.overdue} overdue
+                      </span>
+                    )}
+                    {upcomingSummary.critical > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{ background: "rgba(249,115,22,0.14)", color: "#fb923c", border: "1px solid rgba(249,115,22,0.25)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
+                        {upcomingSummary.critical} &lt; 2h
+                      </span>
+                    )}
+                    {upcomingSummary.upcoming > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{ background: "rgba(16,185,129,0.1)", color: "#10b981", border: "1px solid rgba(16,185,129,0.2)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                        {upcomingSummary.upcoming} upcoming
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  onClick={disableUpcomingFilter}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#64748b",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "#64748b"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                  Clear filter
+                </button>
+              </div>
+            </div>
+
+            {/* Upcoming interactions list inside banner */}
+            {upcomingLoading ? (
+              <div className="px-5 py-3 flex items-center gap-2 text-slate-600 text-xs">
+                <svg className="animate-spin" width="12" height="12" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                Loading upcoming interactions…
+              </div>
+            ) : upcomingData.length > 0 ? (
+              <div className="px-5 py-3 flex flex-wrap gap-2">
+                {upcomingData.slice(0, 8).map((u, i) => {
+                  const now   = Date.now();
+                  const d     = new Date(u.nextInteractionDate).getTime();
+                  const diff  = d - now;
+                  const hours = Math.floor(Math.abs(diff) / (1000 * 60 * 60));
+                  const mins  = Math.floor((Math.abs(diff) % (1000 * 60 * 60)) / (1000 * 60));
+                  const over  = diff < 0;
+                  const crit  = !over && diff < 2 * 60 * 60 * 1000;
+                  const color = over ? "#f87171" : crit ? "#fb923c" : "#f59e0b";
+                  const timeLabel = over
+                    ? `${hours > 0 ? `${hours}h ` : ""}${mins}m overdue`
+                    : hours === 0 ? `${mins}m left`
+                    : `${hours}h left`;
+
+                  return (
+                    <div
+                      key={`${u._id}_${i}`}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs cursor-pointer transition-all"
+                      style={{
+                        background: "rgba(255,255,255,0.03)",
+                        border: `1px solid ${color}25`,
+                        maxWidth: 260,
+                      }}
+                      onClick={() => {
+                        // Find matching org in data and open view modal
+                        const org = data.find((r) => String(r._id) === String(u._id));
+                        if (org) setViewRecord(org);
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                    >
+                      <span style={{ color, fontWeight: 700, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                        {timeLabel}
+                      </span>
+                      <span className="text-slate-400 truncate max-w-[140px]">{u.centreName}</span>
+                      <span className="text-slate-700 text-[10px] shrink-0">
+                        {u.interactionMode === "Email" ? "✉️" : u.interactionMode === "Phone" ? "📞" : u.interactionMode === "WhatsApp" ? "💬" : "🏢"}
+                      </span>
+                    </div>
+                  );
+                })}
+                {upcomingData.length > 8 && (
+                  <span className="flex items-center px-3 py-1.5 text-xs text-slate-600 font-semibold">
+                    +{upcomingData.length - 8} more
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="px-5 py-3 text-slate-600 text-xs">
+                No upcoming interactions found in the next 48 hours.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter bar */}
         <div className="bg-[#13131f] border border-slate-800 rounded-2xl p-3.5 mb-4">
           <div className="flex flex-wrap gap-2.5 items-center">
 
-            {/* Search */}
             <div className="relative min-w-[200px] max-w-xs flex-1">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -407,7 +669,6 @@ export default function AdminPage() {
               )}
             </div>
 
-            {/* Dynamic filter dropdowns */}
             {(category.filters ?? []).map((f) => (
               <FilterDropdown
                 key={`${activeTab}-${f.key}`}
@@ -419,30 +680,51 @@ export default function AdminPage() {
               />
             ))}
 
-            {/* Date range */}
+            {/* ── Upcoming Interactions filter chip (org tab only) ── */}
+            {activeTab === "organisation" && (
+              <button
+                onClick={() => {
+                  const next = !upcomingFilter;
+                  setUpcomingFilter(next);
+                  if (next) {
+                    setActiveTab("organisation");
+                    fetchUpcomingData();
+                  } else {
+                    setHighlightId("");
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border select-none"
+                style={
+                  upcomingFilter
+                    ? { background: "rgba(245,158,11,0.12)", color: "#f59e0b", borderColor: "rgba(245,158,11,0.35)" }
+                    : { background: "rgba(30,41,59,0.6)", color: "#64748b", borderColor: "rgba(51,65,85,0.5)", cursor: "pointer" }
+                }
+              >
+                <span style={{ fontSize: 12 }}>🔔</span>
+                Upcoming · 48h
+                {upcomingFilter && upcomingData.length > 0 && (
+                  <span
+                    className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                    style={{ background: "rgba(245,158,11,0.2)", color: "#f59e0b" }}
+                  >
+                    {upcomingData.length}
+                  </span>
+                )}
+              </button>
+            )}
+
             <div className="flex items-center gap-1.5">
               <span className="text-slate-700 text-xs font-semibold">From</span>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 [color-scheme:dark]"
-              />
+              <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 [color-scheme:dark]"/>
               <span className="text-slate-700 text-xs font-semibold">To</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 [color-scheme:dark]"
-              />
+              <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 [color-scheme:dark]"/>
             </div>
 
-            {/* Clear all */}
             {(activeFiltersCount > 0 || search) && (
-              <button
-                onClick={clearAll}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all"
-              >
+              <button onClick={clearAll}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all">
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
@@ -450,16 +732,14 @@ export default function AdminPage() {
               </button>
             )}
 
-            {/* Record count */}
             <div className="ml-auto text-slate-700 text-xs font-semibold">
               {loading
                 ? <span className="animate-pulse text-slate-600">Loading…</span>
-                : `${total.toLocaleString("en-IN")} record${total !== 1 ? "s" : ""}`
+                : `${(upcomingFilter && activeTab === "organisation" ? displayData.length : total).toLocaleString("en-IN")} record${total !== 1 ? "s" : ""}`
               }
             </div>
           </div>
 
-          {/* Search status indicators */}
           {searchInput && searchInput !== search && (
             <div className="flex items-center gap-2 mt-2">
               <div className="w-2 h-2 rounded-full bg-yellow-400/70 animate-pulse" />
@@ -475,20 +755,15 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* Active filter pills */}
           {activeFiltersCount > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2.5 border-t border-slate-800/60">
               {Object.entries(filters).map(([k, v]) => {
                 if (!v) return null;
                 const fDef = (category.filters ?? []).find((f) => f.key === k);
                 return (
-                  <span
-                    key={k}
-                    className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium"
-                    style={{ background: `${category.accent}15`, color: category.accent, border: `1px solid ${category.accent}25` }}
-                  >
-                    <span className="opacity-60">{fDef?.label ?? k}:</span>
-                    {v}
+                  <span key={k} className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium"
+                    style={{ background: `${category.accent}15`, color: category.accent, border: `1px solid ${category.accent}25` }}>
+                    <span className="opacity-60">{fDef?.label ?? k}:</span>{v}
                     <button onClick={() => handleFilterChange(k, "")} className="opacity-60 hover:opacity-100 transition-opacity">
                       <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -498,7 +773,8 @@ export default function AdminPage() {
                 );
               })}
               {dateFrom && (
-                <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: `${category.accent}15`, color: category.accent, border: `1px solid ${category.accent}25` }}>
+                <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: `${category.accent}15`, color: category.accent, border: `1px solid ${category.accent}25` }}>
                   <span className="opacity-60">From:</span>{dateFrom}
                   <button onClick={() => setDateFrom("")} className="opacity-60 hover:opacity-100">
                     <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -506,7 +782,8 @@ export default function AdminPage() {
                 </span>
               )}
               {dateTo && (
-                <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: `${category.accent}15`, color: category.accent, border: `1px solid ${category.accent}25` }}>
+                <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: `${category.accent}15`, color: category.accent, border: `1px solid ${category.accent}25` }}>
                   <span className="opacity-60">To:</span>{dateTo}
                   <button onClick={() => setDateTo("")} className="opacity-60 hover:opacity-100">
                     <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -519,10 +796,8 @@ export default function AdminPage() {
 
         {/* Bulk action bar */}
         {selectedIds.size > 0 && canDelete && (
-          <div
-            className="flex items-center justify-between px-4 py-2.5 mb-3 rounded-xl border"
-            style={{ background: `${category.accent}0c`, border: `1px solid ${category.accent}25` }}
-          >
+          <div className="flex items-center justify-between px-4 py-2.5 mb-3 rounded-xl border"
+            style={{ background: `${category.accent}0c`, border: `1px solid ${category.accent}25` }}>
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: category.accent }} />
               <span className="text-sm font-semibold" style={{ color: category.accent }}>
@@ -544,17 +819,27 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Data table */}
+        {/* Data table — use displayData when upcoming filter is on */}
         <DataTable
           category={{ ...category, columns: getVisibleColumns(category) }}
-          data={data} loading={loading} search={search}
-          page={page} pages={pages} total={total}
+          data={upcomingFilter && activeTab === "organisation" ? displayData : data}
+          loading={loading || (upcomingFilter && upcomingLoading)}
+          search={search}
+          page={page} pages={pages}
+          total={upcomingFilter && activeTab === "organisation" ? displayData.length : total}
           sortField={sortField} sortDir={sortDir} onSort={handleSort}
           selectedIds={selectedIds} onToggleAll={handleToggleAll} onToggleRow={handleToggleRow}
-          onView={setViewRecord}
+          onView={(row) => {
+            setViewRecord(row);
+            // If a specific highlight row was set, clear it once viewed
+            if (highlightId && String(row._id) === highlightId) setHighlightId("");
+          }}
           onEdit={canEdit   ? setEditRecord   : null}
           onDelete={canDelete ? setDeleteRecord : null}
           onPageChange={setPage}
+          onViewInteractions={setInteractionHistoryRecord}
+          onAddInteraction={setAddInteractionRecord}
+          highlightId={highlightId}
         />
 
       </div>

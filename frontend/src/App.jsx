@@ -1,3 +1,4 @@
+// ─── App.jsx ── UPDATED: /notifications route add kiya ───────────────────────
 import { useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
@@ -20,8 +21,9 @@ const OrganisationPage     = lazy(() => import("./pages/OrganisationPage"));
 const VolunteerFormPage    = lazy(() => import("./pages/VolunteerFormPage"));
 const OrganisationFormPage = lazy(() => import("./pages/OrganisationFormPage"));
 const AccessControlPage    = lazy(() => import("./pages/AccessControlPage"));
+const NotificationsPage    = lazy(() => import("./pages/NotificationsPage")); // ← NEW
 
-// ── Page loader (Suspense fallback - pehli baar load ke liye) ─
+// ── Page loader ────────────────────────────────────────────────
 function PageLoader() {
   return (
     <div style={{
@@ -33,12 +35,9 @@ function PageLoader() {
     }}>
       <div style={{ textAlign: "center" }}>
         <div style={{
-          width: "40px",
-          height: "40px",
-          border: "2px solid #6366f1",
-          borderTopColor: "transparent",
-          borderRadius: "50%",
-          animation: "spin 0.7s linear infinite",
+          width: "40px", height: "40px",
+          border: "2px solid #6366f1", borderTopColor: "transparent",
+          borderRadius: "50%", animation: "spin 0.7s linear infinite",
           margin: "0 auto 12px",
         }} />
         <p style={{ color: "#94a3b8", fontSize: "14px" }}>Loading...</p>
@@ -48,8 +47,7 @@ function PageLoader() {
   );
 }
 
-// ── Admin-tier guard: all admin roles can access the panel ────
-// The panel itself filters what each role sees via permissions.
+// ── Guards ─────────────────────────────────────────────────────
 const AdminOnly = ({ children }) => {
   const { user } = useAuthStore();
   const adminRoles = ["admin", "full_admin", "partial_admin", "data_entry"];
@@ -60,7 +58,6 @@ const AdminOnly = ({ children }) => {
   );
 };
 
-// ── Full Admin only guard ─────────────────────────────────────
 const FullAdminOnly = ({ children }) => {
   const { user } = useAuthStore();
   return (
@@ -70,7 +67,21 @@ const FullAdminOnly = ({ children }) => {
   );
 };
 
-// ── App ───────────────────────────────────────────────────────
+// Notification page guard — admin roles + notificationAccess permission
+const NotificationsOnly = ({ children }) => {
+  const { user } = useAuthStore();
+  const isFullAdmin = user?.role === "admin" || user?.role === "full_admin";
+  const hasNotifPerm = user?.permissions?.notificationAccess === true;
+  const adminRoles = ["admin", "full_admin", "partial_admin", "data_entry"];
+  const allowed = isFullAdmin || (adminRoles.includes(user?.role) && hasNotifPerm);
+  return (
+    <ProtectedRoute>
+      {allowed ? children : <Navigate to="/" replace />}
+    </ProtectedRoute>
+  );
+};
+
+// ── App ────────────────────────────────────────────────────────
 export default function App() {
   const { checkAuth, isAuthenticated, isCheckingAuth } = useAuthStore();
 
@@ -85,11 +96,8 @@ export default function App() {
         position="top-center"
         toastOptions={{
           style: {
-            background: "#1e1e2e",
-            color: "#e2e8f0",
-            border: "1px solid rgba(99,102,241,0.2)",
-            borderRadius: "10px",
-            fontSize: "14px",
+            background: "#1e1e2e", color: "#e2e8f0",
+            border: "1px solid rgba(99,102,241,0.2)", borderRadius: "10px", fontSize: "14px",
           },
           success: { iconTheme: { primary: "#6366f1", secondary: "#fff" } },
           error:   { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
@@ -97,7 +105,6 @@ export default function App() {
       />
 
       <Suspense fallback={<PageLoader />}>
-        {/* ── Har route change pe loader dikhega ── */}
         <RouteChangeLoader />
 
         <Routes>
@@ -124,18 +131,25 @@ export default function App() {
           <Route path="/admin"
             element={<AdminOnly><AdminPage /></AdminOnly>}
           />
+
           <Route path="/organisation"
-  element={<ProtectedRoute><OrganisationPage /></ProtectedRoute>}
-/>
-<Route path="/organisation/add"
-  element={<AdminOnly><OrganisationFormPage /></AdminOnly>}
-/>
-<Route path="/organisation/volunteer"
-  element={<AdminOnly><VolunteerFormPage /></AdminOnly>}
-/>
-<Route path="/access-control"
-  element={<FullAdminOnly><AccessControlPage /></FullAdminOnly>}
-/>
+            element={<ProtectedRoute><OrganisationPage /></ProtectedRoute>}
+          />
+          <Route path="/organisation/add"
+            element={<AdminOnly><OrganisationFormPage /></AdminOnly>}
+          />
+          <Route path="/organisation/volunteer"
+            element={<AdminOnly><VolunteerFormPage /></AdminOnly>}
+          />
+
+          <Route path="/access-control"
+            element={<FullAdminOnly><AccessControlPage /></FullAdminOnly>}
+          />
+
+          {/* ── NEW: Notifications page ── */}
+          <Route path="/notifications"
+            element={<NotificationsOnly><NotificationsPage /></NotificationsOnly>}
+          />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

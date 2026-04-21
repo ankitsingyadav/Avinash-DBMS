@@ -2,7 +2,6 @@ import { create } from "zustand";
 import axiosInstance from "../utils/axios";
 import toast from "react-hot-toast";
 
-// ─── Centre-type sub-modules (imply "organisation" access) ────────────────────
 const CENTRE_TYPE_MODULES = [
   "School", "College", "NGO", "Corporate", "Online", "Community Centre",
 ];

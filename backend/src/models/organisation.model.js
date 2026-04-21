@@ -35,41 +35,45 @@ const contactSchema = new mongoose.Schema({
 });
 
 // ── Interaction sub-schema ────────────────────────────────────────────────────
-const interactionSchema = new mongoose.Schema({
-  interactionBy: {
-    type: String,
-    required: [true, "Interaction by is required"],
-    trim: true,
-  },
-  interactedWith: {
-    type: String,
-    required: [true, "Interacted with is required"],
-    trim: true,
-  },
-  interactionDate: {
-    type: Date,
-    required: [true, "Interaction date is required"],
-  },
-  notes: {
-    type: String,
-    trim: true,
-  },
-  ninAin: {
-    type: String,
-    trim: true,
-  },
-  nextInteractionDate: {
-    type: Date,
-  },
-  interactionMode: {
-    type: String,
-    required: [true, "Interaction mode is required"],
-    enum: {
-      values: ["Email", "Phone", "WhatsApp", "Visit"],
-      message: "Invalid interaction mode: {VALUE}",
+// Single interaction entry — used inside interactions[] array
+const interactionSchema = new mongoose.Schema(
+  {
+    interactionBy: {
+      type: String,
+      required: [true, "Interaction by is required"],
+      trim: true,
+    },
+    interactedWith: {
+      type: String,
+      required: [true, "Interacted with is required"],
+      trim: true,
+    },
+    interactionDate: {
+      type: Date,
+      required: [true, "Interaction date is required"],
+    },
+    notes: {
+      type: String,
+      trim: true,
+    },
+    ninAin: {
+      type: String,
+      trim: true,
+    },
+    nextInteractionDate: {
+      type: Date,
+    },
+    interactionMode: {
+      type: String,
+      required: [true, "Interaction mode is required"],
+      enum: {
+        values: ["Email", "Phone", "WhatsApp", "Visit"],
+        message: "Invalid interaction mode: {VALUE}",
+      },
     },
   },
-});
+  { timestamps: true } // createdAt helps sort history
+);
 
 // ── Main schema ───────────────────────────────────────────────────────────────
 const organisationSchema = new mongoose.Schema(
@@ -135,10 +139,22 @@ const organisationSchema = new mongoose.Schema(
         },
       ],
     },
-    interaction: {
-      type: interactionSchema,
-      required: [true, "Interaction details are required"],
+
+    // ── interactions: full history array ─────────────────────────────────────
+    // Latest entry = interactions[interactions.length - 1]
+    // We also keep a top-level `interaction` virtual for backward compat with
+    // existing code that reads record.interaction
+    interactions: {
+      type: [interactionSchema],
+      default: [],
+      validate: [
+        {
+          validator: (v) => Array.isArray(v) && v.length > 0,
+          message: "At least one interaction entry is required",
+        },
+      ],
     },
+
     onboardedBy: {
       type: String,
       required: [true, "Onboarded by is required"],
@@ -162,6 +178,17 @@ const organisationSchema = new mongoose.Schema(
   { timestamps: true, collection: "organisations" }
 );
 
+// ── Virtual: latest interaction (backward compat) ─────────────────────────────
+// Existing code that reads record.interaction still works — it gets the latest.
+organisationSchema.virtual("interaction").get(function () {
+  if (!this.interactions || this.interactions.length === 0) return null;
+  return this.interactions[this.interactions.length - 1];
+});
+
+// Make virtuals show up in toObject() / toJSON() calls
+organisationSchema.set("toObject", { virtuals: true });
+organisationSchema.set("toJSON",   { virtuals: true });
+
 // ── Shared normalise helper ───────────────────────────────────────────────────
 function normaliseData(data) {
   if (!data) return;
@@ -176,10 +203,6 @@ function normaliseData(data) {
     data.website = `https://${data.website}`;
   }
 }
-
-// ── ALL hooks are async with NO next() ───────────────────────────────────────
-// Newer Mongoose versions do not pass next to async pre hooks.
-// Using async functions lets Mongoose await the hook automatically.
 
 organisationSchema.pre("save", async function () {
   normaliseData(this);
@@ -202,9 +225,10 @@ organisationSchema.index({ state: 1 });
 organisationSchema.index({ district: 1 });
 organisationSchema.index({ pincode: 1 });
 organisationSchema.index({ state: 1, district: 1, centreType: 1 });
-organisationSchema.index({ "interaction.interactionDate": 1 });
-organisationSchema.index({ "interaction.nextInteractionDate": 1 });
+organisationSchema.index({ "interactions.interactionDate": 1 });
+organisationSchema.index({ "interactions.nextInteractionDate": 1 });
 organisationSchema.index({ ninAin: 1 }, { sparse: true });
 
 const Organisation = mongoose.model("Organisation", organisationSchema);
 export default Organisation;
+
