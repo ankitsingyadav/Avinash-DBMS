@@ -6,6 +6,7 @@ import useAuthStore from "./context/authStore";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ScrollToTop from "./components/Scrolltop";
 import RouteChangeLoader from "./components/RouteChangeLoader";
+import NotificationsPage from "./pages/NotificationsPage";
 
 // ── Lazy imports ──────────────────────────────────────────────
 const SignupPage           = lazy(() => import("./pages/SignupPage"));
