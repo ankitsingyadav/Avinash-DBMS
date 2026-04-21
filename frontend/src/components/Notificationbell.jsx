@@ -1,6 +1,3 @@
-// ─── components/NotificationBell.jsx ─────────────────────────────────────────
-// CHANGE: Bell button click → navigate to /notifications page
-// CHANGE: "View all" footer button → navigate to /notifications page
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
