@@ -79,7 +79,7 @@ export const CATEGORIES = [
         label: "Interest",
         options: [
           "Teaching",
-          "Tech ",
+          "Tech",
           "Social Work",
           "Healthcare",
           "Environment",
