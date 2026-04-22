@@ -175,7 +175,7 @@ export default function AdminPage() {
     setUpcomingLoading(true);
     try {
       const res  = await axios.get("/organisations/upcoming-interactions");
-      const list = res.data?.data?.interactions || [];
+const list = res.data?.interactions || [];
       setUpcomingData(list);
     } catch {
       setUpcomingData([]);

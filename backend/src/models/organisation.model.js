@@ -35,7 +35,6 @@ const contactSchema = new mongoose.Schema({
 });
 
 // ── Interaction sub-schema ────────────────────────────────────────────────────
-// Single interaction entry — used inside interactions[] array
 const interactionSchema = new mongoose.Schema(
   {
     interactionBy: {
@@ -72,7 +71,7 @@ const interactionSchema = new mongoose.Schema(
       },
     },
   },
-  { timestamps: true } // createdAt helps sort history
+  { timestamps: true }
 );
 
 // ── Main schema ───────────────────────────────────────────────────────────────
@@ -140,10 +139,6 @@ const organisationSchema = new mongoose.Schema(
       ],
     },
 
-    // ── interactions: full history array ─────────────────────────────────────
-    // Latest entry = interactions[interactions.length - 1]
-    // We also keep a top-level `interaction` virtual for backward compat with
-    // existing code that reads record.interaction
     interactions: {
       type: [interactionSchema],
       default: [],
@@ -169,23 +164,29 @@ const organisationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+
+    // ── Data completion status (replaces Active/Inactive) ─────────────────────
+    // Basic   = minimal info entered
+    // Partial = some fields complete
+    // Complete = all fields verified and complete
     status: {
       type: String,
-      enum: ["Active", "Inactive"],
-      default: "Active",
+      enum: {
+        values: ["Basic", "Partial", "Complete"],
+        message: "Invalid status: {VALUE}. Must be Basic, Partial, or Complete",
+      },
+      default: "Basic",
     },
   },
   { timestamps: true, collection: "organisations" }
 );
 
 // ── Virtual: latest interaction (backward compat) ─────────────────────────────
-// Existing code that reads record.interaction still works — it gets the latest.
 organisationSchema.virtual("interaction").get(function () {
   if (!this.interactions || this.interactions.length === 0) return null;
   return this.interactions[this.interactions.length - 1];
 });
 
-// Make virtuals show up in toObject() / toJSON() calls
 organisationSchema.set("toObject", { virtuals: true });
 organisationSchema.set("toJSON",   { virtuals: true });
 
@@ -202,17 +203,18 @@ function normaliseData(data) {
   if (data.website && !/^https?:\/\//i.test(data.website)) {
     data.website = `https://${data.website}`;
   }
+  // Migrate legacy Active/Inactive to new schema
+  if (data.status === "Active")   data.status = "Complete";
+  if (data.status === "Inactive") data.status = "Basic";
 }
 
 organisationSchema.pre("save", async function () {
   normaliseData(this);
 });
-
 organisationSchema.pre("findOneAndUpdate", async function () {
   const update = this.getUpdate();
   normaliseData(update?.$set || update);
 });
-
 organisationSchema.pre("updateOne", async function () {
   const update = this.getUpdate();
   normaliseData(update?.$set || update);
@@ -231,4 +233,3 @@ organisationSchema.index({ ninAin: 1 }, { sparse: true });
 
 const Organisation = mongoose.model("Organisation", organisationSchema);
 export default Organisation;
-
