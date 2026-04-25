@@ -38,6 +38,19 @@ const normaliseEmail = (raw, fallbackSlug = "record") => {
 
 const VALID_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
 
+// ── FIX: Centralised status normaliser ───────────────────────────────────────
+// Model enum only accepts: "Basic" | "Partial" | "Complete"
+// pre('save') hook migrates legacy values but insertMany skips hooks entirely,
+// so we must normalise before every write.
+const VALID_DATA_STATUSES = ["Basic", "Partial", "Complete"];
+const LEGACY_STATUS_MAP   = { Active: "Complete", Inactive: "Basic" };
+
+const normaliseDataStatus = (raw) => {
+  if (!raw) return "Basic";
+  if (VALID_DATA_STATUSES.includes(raw)) return raw;
+  return LEGACY_STATUS_MAP[raw] ?? "Basic";
+};
+
 // ─── Helper: safely merge dataScope $or with search $or ───────────────────────
 const buildQuery = (dataScope, dateScope, searchOr, extraFilters = {}) => {
   const query = { ...dateScope, ...extraFilters };
@@ -120,12 +133,12 @@ export const createOrganisation = asyncHandler(async (req, res) => {
           email:         normaliseEmail(c.email, centreName),
         };
       }),
-      // Store as array — first entry in history
       interactions: [buildInteractionFromBody(interaction)],
       onboardedBy:  String(onboardedBy).trim(),
       ninAin:       ninAin?.trim() || undefined,
       registeredBy: req.user._id,
-      status:       ["Active", "Inactive"].includes(req.body.status) ? req.body.status : "Active",
+      // FIX 1: was ["Active","Inactive"] — model enum only accepts Basic/Partial/Complete
+      status: normaliseDataStatus(req.body.status),
     });
 
     return sendSuccess(res, 201, "Organisation registered successfully.", { organisation });
@@ -138,7 +151,6 @@ export const createOrganisation = asyncHandler(async (req, res) => {
 });
 
 // ── POST /api/v1/organisations/:id/interactions ───────────────────────────────
-// Add a new interaction entry to an existing organisation's history
 export const addInteraction = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { interactionBy, interactedWith, interactionDate, interactionMode } = req.body;
@@ -149,7 +161,6 @@ export const addInteraction = asyncHandler(async (req, res) => {
   if (!VALID_MODES.includes(interactionMode))
     return sendError(res, 422, `Invalid interactionMode. Must be one of: ${VALID_MODES.join(", ")}.`);
 
-  // data_entry: verify ownership
   if (req.user.role === "data_entry") {
     const existing = await Organisation.findById(id).lean();
     if (!existing) return sendError(res, 404, "Organisation not found.");
@@ -168,7 +179,6 @@ export const addInteraction = asyncHandler(async (req, res) => {
 
     if (!organisation) return sendError(res, 404, "Organisation not found.");
 
-    // Return the newly added interaction (last in array)
     const added = organisation.interactions[organisation.interactions.length - 1];
     return sendSuccess(res, 201, "Interaction added successfully.", {
       interaction: added,
@@ -182,7 +192,6 @@ export const addInteraction = asyncHandler(async (req, res) => {
 });
 
 // ── GET /api/v1/organisations/:id/interactions ────────────────────────────────
-// Get full interaction history for an organisation (newest first)
 export const getInteractions = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -192,7 +201,6 @@ export const getInteractions = asyncHandler(async (req, res) => {
 
   if (!organisation) return sendError(res, 404, "Organisation not found.");
 
-  // Return newest first
   const history = [...(organisation.interactions || [])].reverse();
 
   return sendSuccess(res, 200, "Interactions retrieved successfully.", {
@@ -246,7 +254,10 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       onboardedBy:  String(r.onboardedBy || "System Import").trim(),
       ninAin:       String(r.ninAin || "").trim() || `NIN-IMPORT-${slug.toUpperCase().slice(0, 10)}`,
       registeredBy: req.user._id,
-      status:       ["Active", "Inactive"].includes(r.status) ? r.status : "Active",
+      // FIX 2: insertMany skips pre('save') hook entirely — must normalise here
+      // Old code: ["Active","Inactive"].includes(r.status) ? r.status : "Active"
+      // That saved invalid enum values → ValidationError or silent failure
+      status: normaliseDataStatus(r.status),
     };
   });
 
@@ -419,7 +430,6 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
     "centreType", "centreName", "website", "address",
     "city", "district", "state", "pincode",
     "contacts", "onboardedBy", "ninAin", "status",
-    // Note: 'interaction' (singular) in EditModal body → update latest entry
     "interaction",
   ];
   const updates = {};
@@ -429,24 +439,19 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
 
   if (updates.pincode) updates.pincode = normalisePincode(updates.pincode);
   if (updates.website) updates.website = normaliseWebsite(updates.website);
+  // FIX 3: status update via EditModal also needs normalisation
+  if (updates.status)  updates.status  = normaliseDataStatus(updates.status);
 
-  // If interaction (singular) is sent, update the last element in interactions[]
-  // This preserves backward compat with EditModal which sends `interaction` key
   const mongoUpdate = { $set: {} };
 
   if (updates.interaction) {
     const interactionData = updates.interaction;
     delete updates.interaction;
-
-    // We need to know current interactions length to target last index
-    // Use $push to always add as latest, OR update via positional — simplest:
-    // Just $push a new entry so history is preserved
     mongoUpdate.$push = {
       interactions: buildInteractionFromBody(interactionData),
     };
   }
 
-  // All other scalar updates
   Object.keys(updates).forEach((k) => {
     mongoUpdate.$set[k] = updates[k];
   });

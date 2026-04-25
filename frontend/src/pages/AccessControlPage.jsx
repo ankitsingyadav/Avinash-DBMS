@@ -93,6 +93,7 @@ const GLOBAL_CSS = `
   @keyframes acl-spin    { to { transform: rotate(360deg); } }
   @keyframes acl-fadeUp  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes acl-slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes acl-slideInUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   @keyframes acl-pulse   { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
   @keyframes acl-shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
   @keyframes acl-scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -124,6 +125,7 @@ const GLOBAL_CSS = `
     cursor: pointer; font-size: 12px; font-weight: 600;
     font-family: 'DM Sans', sans-serif;
     transition: background 0.12s, border-color 0.12s, color 0.12s;
+    white-space: nowrap;
   }
   .acl-btn-edit:hover { background: rgba(99,102,241,0.18); color: #a5b4fc; border-color: rgba(99,102,241,0.4); }
 
@@ -150,7 +152,7 @@ const GLOBAL_CSS = `
     transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), background 0.22s;
   }
 
-  /* Permission panel */
+  /* Permission panel — desktop: slide from right, mobile: slide from bottom */
   .acl-panel { animation: acl-slideIn 0.26s cubic-bezier(0.22,1,0.36,1); }
 
   /* Modal */
@@ -197,19 +199,150 @@ const GLOBAL_CSS = `
     display: flex; flex-direction: column; align-items: center; gap: 4px;
   }
 
-  /* Responsive table */
+  /* ── STAT GRID RESPONSIVE ── */
+  .acl-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+  }
+  @media (max-width: 1100px) {
+    .acl-stat-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .acl-stat-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  }
+  @media (max-width: 360px) {
+    .acl-stat-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  }
+
+  /* ── TABLE RESPONSIVE ── */
+  /* Desktop: full grid table */
+  .acl-table-header {
+    display: grid;
+    grid-template-columns: 2fr 1.6fr 1fr 1.3fr 1.3fr 80px 110px;
+    padding: 10px 24px;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.045);
+    background: rgba(255,255,255,0.012);
+  }
+  .acl-table-row {
+    display: grid;
+    grid-template-columns: 2fr 1.6fr 1fr 1.3fr 1.3fr 80px 110px;
+    padding: 13px 24px;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Tablet: hide Actions + Modules columns */
   @media (max-width: 900px) {
-    .acl-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .acl-table-header,
+    .acl-table-header {
+      grid-template-columns: 2fr 1.4fr 1fr 80px 90px;
+      padding: 10px 16px;
+    }
     .acl-table-row {
-      min-width: 700px;
+      grid-template-columns: 2fr 1.4fr 1fr 80px 90px;
+      padding: 12px 16px;
+    }
+    .acl-col-modules,
+    .acl-col-actions { display: none !important; }
+    .acl-col-modules-hdr,
+    .acl-col-actions-hdr { display: none !important; }
+  }
+
+  /* Mobile: card-style rows */
+  @media (max-width: 600px) {
+    .acl-table-header { display: none !important; }
+    .acl-table-row {
+      display: flex !important;
+      flex-direction: column;
+      padding: 14px 14px;
+      gap: 10px;
+    }
+    .acl-table-wrap {
+      border-radius: 12px;
+    }
+    .acl-row-mobile-header {
+      display: flex !important;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .acl-row-mobile-body {
+      display: flex !important;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .acl-row-mobile-footer {
+      display: flex !important;
+      align-items: center;
+      justify-content: space-between;
+    }
+    /* Hide contact column on mobile - shown inside card instead */
+    .acl-col-contact-desktop { display: none !important; }
+  }
+
+  /* ── PANEL RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .acl-panel {
+      animation: acl-slideInUp 0.28s cubic-bezier(0.22,1,0.36,1) !important;
+    }
+    .acl-panel-inner {
+      width: 100vw !important;
+      height: 92vh !important;
+      border-radius: 20px 20px 0 0 !important;
+      border-left: none !important;
+      border-top: 1px solid rgba(99,102,241,0.12) !important;
+    }
+    .acl-panel-overlay {
+      align-items: flex-end !important;
     }
   }
-  @media (max-width: 640px) {
-    .acl-stat-grid { grid-template-columns: repeat(3, 1fr) !important; }
+
+  /* ── MODAL RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .acl-modal-wrap {
+      align-items: flex-end !important;
+      padding: 0 !important;
+    }
+    .acl-modal {
+      border-radius: 20px 20px 0 0 !important;
+      max-height: 96vh !important;
+      width: 100% !important;
+    }
   }
-  @media (max-width: 420px) {
-    .acl-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* ── PAGE HEADER ── */
+  @media (max-width: 600px) {
+    .acl-page-header {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      gap: 12px !important;
+    }
+    .acl-add-btn {
+      width: 100% !important;
+      justify-content: center !important;
+    }
+  }
+
+  /* ── SEARCH BAR ── */
+  @media (max-width: 500px) {
+    .acl-search-bar {
+      padding: 8px 12px !important;
+    }
+  }
+
+  /* ── PERMISSION PANEL INTERNALS ── */
+  @media (max-width: 400px) {
+    .acl-role-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .acl-module-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .acl-date-grid {
+      flex-direction: column !important;
+    }
   }
 `;
 
@@ -252,10 +385,14 @@ const Avatar = memo(({ user, size = 36 }) => {
 
 // Skeleton row
 const SkeletonRow = () => (
-  <div className="acl-table-row" style={{ display: "grid", gridTemplateColumns: "2fr 1.6fr 1fr 1.3fr 1.3fr 80px 100px", padding: "14px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.04)", gap: 0 }}>
-    {[140, 120, 70, 100, 80, 40, 80].map((w, i) => (
-      <div key={i} className="acl-skeleton" style={{ height: 14, width: w, borderRadius: 6 }} />
-    ))}
+  <div style={{ padding: "14px 24px", borderBottom: "1px solid rgba(255,255,255,0.04)", display: "flex", alignItems: "center", gap: 12 }}>
+    <div className="acl-skeleton" style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0 }} />
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="acl-skeleton" style={{ height: 13, width: "55%", borderRadius: 6 }} />
+      <div className="acl-skeleton" style={{ height: 11, width: "35%", borderRadius: 6 }} />
+    </div>
+    <div className="acl-skeleton" style={{ height: 22, width: 70, borderRadius: 99 }} />
+    <div className="acl-skeleton" style={{ height: 22, width: 40, borderRadius: 8 }} />
   </div>
 );
 
@@ -269,7 +406,7 @@ const StatCard = memo(({ label, value, color, filterKey, activeFilter, onClick, 
       style={{
         background: isActive ? `${color}10` : "#111119",
         border: `1px solid ${isActive ? color + "45" : "rgba(255,255,255,0.05)"}`,
-        padding: "14px 16px",
+        padding: "14px 12px",
         position: "relative", overflow: "hidden",
         boxShadow: isActive ? `0 0 0 1px ${color}25, 0 8px 32px ${color}14` : "none",
       }}
@@ -287,20 +424,99 @@ const StatCard = memo(({ label, value, color, filterKey, activeFilter, onClick, 
 
       <div style={{
         color: isActive ? color : "#e2e8f0",
-        fontSize: 26, fontWeight: 800, lineHeight: 1,
+        fontSize: 22, fontWeight: 800, lineHeight: 1,
         fontFamily: "'JetBrains Mono', monospace",
         fontVariantNumeric: "tabular-nums",
         transition: "color 0.18s",
       }}>
         {value}
       </div>
-      <div style={{ color: isActive ? color : "#475569", fontSize: 11, fontWeight: 600, marginTop: 5, transition: "color 0.18s", letterSpacing: "0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <div style={{ color: isActive ? color : "#475569", fontSize: 10, fontWeight: 600, marginTop: 5, transition: "color 0.18s", letterSpacing: "0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {label}
       </div>
 
       {isActive && (
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
       )}
+    </div>
+  );
+});
+
+// ── Mobile User Card Row ──────────────────────────────────────────────────────
+const MobileUserRow = memo(({ u, me, isMe, toggling, onEdit, onDelete, onToggle }) => {
+  const mods           = u.permissions?.allowedModules ?? [];
+  const acts           = u.permissions?.allowedActions ?? [];
+  const hasNotifAccess = u.permissions?.notificationAccess === true;
+  const isFullAdminUser= u.role === "admin" || u.role === "full_admin";
+
+  return (
+    <div
+      className="acl-row"
+      style={{
+        padding: "14px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+        opacity: u.isActive ? 1 : 0.45,
+        background: isMe ? "rgba(99,102,241,0.025)" : "transparent",
+      }}
+    >
+      {/* Top row: avatar + name + actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <Avatar user={u} size={40} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>{u.fullName}</span>
+            {isMe && <span style={{ color: "#6366f1", fontSize: 9, fontWeight: 800, background: "rgba(99,102,241,0.14)", padding: "1px 6px", borderRadius: 99, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>YOU</span>}
+            {hasNotifAccess && !isFullAdminUser && <span title="Notification Access" style={{ fontSize: 11, flexShrink: 0 }}>🔔</span>}
+          </div>
+          <div style={{ color: "#334155", fontSize: 11, marginTop: 1, fontFamily: "'JetBrains Mono', monospace" }}>
+            {u.lastLogin ? `Last login ${formatDate(u.lastLogin)}` : "Never logged in"}
+          </div>
+        </div>
+        {/* Toggle */}
+        <button
+          className="acl-toggle"
+          onClick={() => !isMe && !toggling && onToggle(u)}
+          disabled={isMe || toggling}
+          style={{
+            background: u.isActive ? "rgba(16,185,129,0.2)" : "rgba(100,116,139,0.12)",
+            cursor: isMe ? "not-allowed" : "pointer",
+            opacity: toggling ? 0.5 : 1,
+          }}
+        >
+          <div className="acl-toggle-thumb" style={{
+            background: u.isActive ? "#10b981" : "#334155",
+            transform: u.isActive ? "translateX(18px)" : "translateX(0)",
+            boxShadow: u.isActive ? "0 0 8px rgba(16,185,129,0.6)" : "none",
+            animation: toggling ? "acl-pulse 0.8s ease infinite" : "none",
+          }} />
+        </button>
+      </div>
+
+      {/* Contact */}
+      <div style={{ marginBottom: 8, paddingLeft: 50 }}>
+        <div style={{ color: "#475569", fontSize: 12 }}>{u.email}</div>
+        <div style={{ color: "#334155", fontSize: 11, marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>{u.phone}</div>
+      </div>
+
+      {/* Meta + Actions */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 50, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <RoleBadge role={u.role} />
+          {/* Modules/Actions summary */}
+          {!isFullAdminUser && mods.length > 0 && (
+            <span style={{ color: "#8b5cf6", fontSize: 11 }} title={mods.join(", ")}>
+              {mods.slice(0, 2).join(", ")}{mods.length > 2 ? ` +${mods.length - 2}` : ""}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="acl-btn-edit" onClick={() => onEdit(u)}>
+            <span style={{ fontSize: 11 }}>✏️</span> Edit
+          </button>
+          {!isMe && (
+            <button className="acl-btn-del" onClick={() => onDelete(u)}>🗑️</button>
+          )}
+        </div>
+      </div>
     </div>
   );
 });
@@ -361,10 +577,11 @@ function PermissionPanel({ user, onClose, onSaved }) {
 
   return (
     <div
+      className="acl-panel-overlay"
       style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)", display: "flex", alignItems: "stretch", justifyContent: "flex-end" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="acl-panel acl-scroll" style={{
+      <div className="acl-panel acl-panel-inner acl-scroll" style={{
         width: "min(500px, 100vw)", height: "100vh",
         background: "#0d0d18", borderLeft: "1px solid rgba(99,102,241,0.12)",
         overflowY: "auto", padding: "0",
@@ -374,26 +591,26 @@ function PermissionPanel({ user, onClose, onSaved }) {
         <div style={{
           position: "sticky", top: 0, zIndex: 10,
           background: "#0d0d18", borderBottom: "1px solid rgba(255,255,255,0.05)",
-          padding: "20px 24px",
+          padding: "20px 20px",
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Avatar user={user} size={42} />
             <div>
               <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, marginBottom: 1 }}>{user?.fullName}</div>
-              <div style={{ color: "#475569", fontSize: 11.5 }}>{user?.email}</div>
+              <div style={{ color: "#475569", fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px", whiteSpace: "nowrap" }}>{user?.email}</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 9, padding: "7px 11px", color: "#475569", cursor: "pointer", fontSize: 14, lineHeight: 1, fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s" }}>✕</button>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 9, padding: "7px 11px", color: "#475569", cursor: "pointer", fontSize: 14, lineHeight: 1, fontFamily: "'DM Sans', sans-serif", transition: "all 0.12s", flexShrink: 0 }}>✕</button>
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, padding: "24px", display: "flex", flexDirection: "column", gap: 26 }}>
+        <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", gap: 24 }}>
 
           {/* Role */}
           <section>
             <label style={sectionLabel}>Assign Role</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div className="acl-role-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {ROLES.map((r) => {
                 const on = role === r.value;
                 return (
@@ -430,12 +647,12 @@ function PermissionPanel({ user, onClose, onSaved }) {
                   padding: "14px 16px", borderRadius: 11, cursor: "pointer",
                   background: perms.notificationAccess ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.02)",
                   border: `1px solid ${perms.notificationAccess ? "rgba(99,102,241,0.35)" : "rgba(255,255,255,0.05)"}`,
-                  transition: "all 0.15s",
+                  transition: "all 0.15s", gap: 10,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 20 }}>🔔</span>
-                  <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>🔔</span>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ color: perms.notificationAccess ? "#a5b4fc" : "#94a3b8", fontWeight: 700, fontSize: 13 }}>
                       Upcoming Interaction Alerts
                     </div>
@@ -444,7 +661,6 @@ function PermissionPanel({ user, onClose, onSaved }) {
                     </div>
                   </div>
                 </div>
-                {/* Toggle */}
                 <button
                   className="acl-toggle"
                   style={{
@@ -477,7 +693,7 @@ function PermissionPanel({ user, onClose, onSaved }) {
                   {perms.allowedModules.length} selected
                 </span>
               </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+              <div className="acl-module-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
                 {MODULES.map((m) => {
                   const on = perms.allowedModules.includes(m.value);
                   return (
@@ -508,12 +724,12 @@ function PermissionPanel({ user, onClose, onSaved }) {
                   {perms.allowedActions.length} selected
                 </span>
               </label>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {ACTIONS.map((a) => {
                   const on = perms.allowedActions.includes(a.value);
                   return (
                     <button key={a.value} onClick={() => toggleAction(a.value)} className="acl-tog-btn" style={{
-                      flex: 1,
+                      flex: "1 1 60px", minWidth: 60,
                       background: on ? `${a.color}12` : "rgba(255,255,255,0.02)",
                       borderColor: on ? `${a.color}40` : "rgba(255,255,255,0.05)",
                       color: on ? a.color : "#475569",
@@ -560,7 +776,7 @@ function PermissionPanel({ user, onClose, onSaved }) {
           {showDateRange && (
             <section>
               <label style={sectionLabel}>Date Range Restriction</label>
-              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+              <div className="acl-date-grid" style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ color: "#475569", fontSize: 11, marginBottom: 5, fontWeight: 600 }}>From</div>
                   <input type="date" value={perms.dateFrom} onChange={(e) => setPerms((p) => ({ ...p, dateFrom: e.target.value }))} style={inputCls} className="acl-input" />
@@ -586,7 +802,7 @@ function PermissionPanel({ user, onClose, onSaved }) {
         <div style={{
           position: "sticky", bottom: 0,
           background: "#0d0d18", borderTop: "1px solid rgba(255,255,255,0.05)",
-          padding: "16px 24px", display: "flex", gap: 10,
+          padding: "16px 20px", display: "flex", gap: 10,
         }}>
           <button onClick={onClose} style={{
             flex: 1, padding: "11px", borderRadius: 10,
@@ -663,6 +879,7 @@ function AddUserModal({ onClose, onCreated }) {
 
   return (
     <div
+      className="acl-modal-wrap"
       style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
@@ -671,15 +888,15 @@ function AddUserModal({ onClose, onCreated }) {
         borderRadius: 20, width: "min(500px, 100%)", maxHeight: "92vh",
         overflowY: "auto", padding: 0,
       }}>
-        <div style={{ padding: "22px 26px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ padding: "22px 22px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ color: "#6366f1", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>Access Control</div>
             <h2 style={{ color: "#fff", fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>Create New User</h2>
           </div>
-          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 9, padding: "7px 11px", color: "#475569", cursor: "pointer", fontSize: 14, lineHeight: 1, fontFamily: "'DM Sans', sans-serif" }}>✕</button>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 9, padding: "7px 11px", color: "#475569", cursor: "pointer", fontSize: 14, lineHeight: 1, fontFamily: "'DM Sans', sans-serif", flexShrink: 0 }}>✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: "22px 26px 26px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <form onSubmit={handleSubmit} style={{ padding: "20px 22px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={labelStyle}>Full Name</label>
             <input required className="acl-input" style={inputStyle} placeholder="e.g. Arjun Sharma" value={form.fullName} onChange={(e) => set("fullName", e.target.value)} />
@@ -759,7 +976,7 @@ function DeleteModal({ target, onCancel, onConfirm, loading }) {
     <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div className="acl-modal" style={{
         background: "#0d0d18", border: "1px solid rgba(239,68,68,0.2)",
-        borderRadius: 18, padding: 28, maxWidth: 400, width: "100%",
+        borderRadius: 18, padding: "24px 20px", maxWidth: 380, width: "100%",
       }}>
         <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.22)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, marginBottom: 16 }}>🗑️</div>
         <h3 style={{ color: "#fff", margin: "0 0 8px", fontSize: 17, fontWeight: 800, letterSpacing: "-0.01em" }}>Delete User?</h3>
@@ -793,11 +1010,20 @@ export default function AccessControlPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting]         = useState(false);
   const [togglingId, setTogglingId]     = useState(null);
+  const [isMobile, setIsMobile]         = useState(false);
   const searchRef = useRef(null);
 
   useEffect(() => {
     if (me && !isFullAdmin()) navigate("/");
   }, [me]);
+
+  // Detect mobile
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 600);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -881,10 +1107,13 @@ export default function AccessControlPage() {
       {editUser     && <PermissionPanel user={editUser} onClose={() => setEditUser(null)} onSaved={fetchUsers} />}
       {deleteTarget && <DeleteModal target={deleteTarget} loading={deleting} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />}
 
-      <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 16px 80px" }}>
+      <div style={{ maxWidth: 1500, margin: "0 auto", padding: "20px 12px 80px" }}>
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+        <div
+          className="acl-page-header"
+          style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 14 }}
+        >
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
               <div style={{ width: 3, height: 16, borderRadius: 99, background: "linear-gradient(180deg, #6366f1, transparent)" }} />
@@ -892,15 +1121,16 @@ export default function AccessControlPage() {
                 Full Admin · Access Control
               </span>
             </div>
-            <h1 style={{ color: "#f1f5f9", fontSize: "clamp(20px, 4vw, 28px)", fontWeight: 800, margin: 0, letterSpacing: "-0.03em" }}>
+            <h1 style={{ color: "#f1f5f9", fontSize: "clamp(18px, 5vw, 28px)", fontWeight: 800, margin: 0, letterSpacing: "-0.03em" }}>
               User Management
             </h1>
-            <p style={{ color: "#334155", fontSize: 12.5, margin: "5px 0 0" }}>
+            <p style={{ color: "#334155", fontSize: 12, margin: "5px 0 0" }}>
               {loading ? "Loading users…" : `${users.length} user${users.length !== 1 ? "s" : ""} in the system`}
             </p>
           </div>
 
           <button
+            className="acl-add-btn"
             onClick={() => setShowAdd(true)}
             style={{
               display: "flex", alignItems: "center", gap: 8,
@@ -921,7 +1151,7 @@ export default function AccessControlPage() {
         </div>
 
         {/* ── Stat Cards ──────────────────────────────────────────────────── */}
-        <div className="acl-stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 20 }}>
+        <div className="acl-stat-grid" style={{ marginBottom: 16 }}>
           {STAT_CARDS.map((s) => (
             <StatCard
               key={s.key}
@@ -937,12 +1167,15 @@ export default function AccessControlPage() {
         </div>
 
         {/* ── Search Bar ──────────────────────────────────────────────────── */}
-        <div style={{
-          background: "#111119", border: "1px solid rgba(255,255,255,0.055)",
-          borderRadius: 13, padding: "10px 16px", marginBottom: 12,
-          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-        }}>
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#334155" strokeWidth={2.2}>
+        <div
+          className="acl-search-bar"
+          style={{
+            background: "#111119", border: "1px solid rgba(255,255,255,0.055)",
+            borderRadius: 13, padding: "10px 16px", marginBottom: 10,
+            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          }}
+        >
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#334155" strokeWidth={2.2} style={{ flexShrink: 0 }}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
           <input
@@ -951,7 +1184,7 @@ export default function AccessControlPage() {
             placeholder="Search by name, email, phone or role…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ background: "none", border: "none", outline: "none", color: "#e2e8f0", fontSize: 13, flex: 1, minWidth: 140, fontFamily: "'DM Sans', sans-serif" }}
+            style={{ background: "none", border: "none", outline: "none", color: "#e2e8f0", fontSize: 13, flex: 1, minWidth: 120, fontFamily: "'DM Sans', sans-serif" }}
           />
 
           {activeFilter !== "total" && (
@@ -974,20 +1207,18 @@ export default function AccessControlPage() {
           </span>
         </div>
 
-        {/* ── Table (responsive wrapper) ──────────────────────────────────── */}
+        {/* ── Table / Card List ───────────────────────────────────────────── */}
         <div className="acl-table-wrap" style={{ background: "#111119", border: "1px solid rgba(255,255,255,0.055)", borderRadius: 16, overflow: "hidden" }}>
 
-          {/* Table Header */}
-          <div className="acl-table-header" style={{
-            display: "grid",
-            gridTemplateColumns: "2fr 1.6fr 1fr 1.3fr 1.3fr 80px 110px",
-            padding: "10px 24px", alignItems: "center",
-            borderBottom: "1px solid rgba(255,255,255,0.045)",
-            background: "rgba(255,255,255,0.012)",
-          }}>
-            {["User", "Contact", "Role", "Modules", "Actions", "Status", ""].map((h) => (
-              <span key={h} style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>{h}</span>
-            ))}
+          {/* Table Header — hidden on mobile via CSS */}
+          <div className="acl-table-header">
+            <span style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>User</span>
+            <span style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>Contact</span>
+            <span style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>Role</span>
+            <span className="acl-col-modules-hdr" style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>Modules</span>
+            <span className="acl-col-actions-hdr" style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>Actions</span>
+            <span style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>Status</span>
+            <span style={{ color: "#1e293b", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}></span>
           </div>
 
           {/* Loading Skeletons */}
@@ -1011,8 +1242,22 @@ export default function AccessControlPage() {
             </div>
           )}
 
-          {/* Rows */}
-          {!loading && filtered.map((u, i) => {
+          {/* Mobile card rows */}
+          {!loading && isMobile && filtered.map((u, i) => (
+            <MobileUserRow
+              key={u._id}
+              u={u}
+              me={me}
+              isMe={u._id === me?._id}
+              toggling={togglingId === u._id}
+              onEdit={setEditUser}
+              onDelete={setDeleteTarget}
+              onToggle={handleToggleStatus}
+            />
+          ))}
+
+          {/* Desktop grid rows */}
+          {!loading && !isMobile && filtered.map((u, i) => {
             const isMe            = u._id === me?._id;
             const mods            = u.permissions?.allowedModules ?? [];
             const acts            = u.permissions?.allowedActions ?? [];
@@ -1025,9 +1270,6 @@ export default function AccessControlPage() {
                 key={u._id}
                 className="acl-row acl-table-row"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "2fr 1.6fr 1fr 1.3fr 1.3fr 80px 110px",
-                  padding: "13px 24px", alignItems: "center",
                   borderBottom: i < filtered.length - 1 ? "1px solid rgba(255,255,255,0.032)" : "none",
                   opacity: u.isActive ? 1 : 0.4,
                   animationDelay: `${Math.min(i * 20, 200)}ms`,
@@ -1063,7 +1305,7 @@ export default function AccessControlPage() {
                 <div><RoleBadge role={u.role} /></div>
 
                 {/* Modules */}
-                <div style={{ paddingRight: 8 }}>
+                <div className="acl-col-modules" style={{ paddingRight: 8 }}>
                   {isFullAdminUser ? (
                     <span style={{ color: "#f59e0b", fontSize: 11, fontWeight: 600, opacity: 0.5 }}>All modules</span>
                   ) : mods.length > 0 ? (
@@ -1076,7 +1318,7 @@ export default function AccessControlPage() {
                 </div>
 
                 {/* Actions */}
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                <div className="acl-col-actions" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                   {isFullAdminUser ? (
                     <span style={{ color: "#f59e0b", fontSize: 11, fontWeight: 600, opacity: 0.5 }}>All</span>
                   ) : acts.length > 0 ? (
@@ -1132,7 +1374,7 @@ export default function AccessControlPage() {
           {/* Footer */}
           {!loading && filtered.length > 0 && (
             <div style={{
-              padding: "10px 24px", borderTop: "1px solid rgba(255,255,255,0.035)",
+              padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.035)",
               display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
               background: "rgba(255,255,255,0.01)",
             }}>
