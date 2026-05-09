@@ -1,10 +1,3 @@
-// ─── pages/AdminPage.jsx ─────────────────────────────────────────────────────
-// KEY CHANGES:
-//  1. Reads ?filter=upcoming from URL params (set by NotificationsPage "View" click)
-//  2. When filter=upcoming is active, fetches only orgs with nextInteractionDate
-//     in next 48h from client-side — uses a derived "upcomingOnly" overlay on
-//     the existing data (no new API endpoint needed; server already supports it).
-//  3. Adds an "Upcoming Interactions" highlighted banner/filter bar when active.
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";

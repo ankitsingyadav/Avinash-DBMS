@@ -71,92 +71,181 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="auth-bg min-h-screen flex items-center justify-center p-4">
-      <div className="auth-card w-full max-w-lg">
+    <div
+      style={{
+        background: "#f0f4f8",
+        backgroundImage: "radial-gradient(#cbd5e1 1px, transparent 1px)",
+        backgroundSize: "24px 24px",
+      }}
+      className="min-h-screen flex items-center justify-center p-4"
+    >
+      <div
+        style={{
+          background: "#ffffff",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 4px 6px -1px rgba(0,0,0,0.04), 0 20px 60px -10px rgba(14,165,233,0.08)",
+          borderRadius: "24px",
+        }}
+        className="w-full max-w-lg p-10"
+      >
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="logo-mark mx-auto mb-4">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="10" fill="url(#grad1)"/>
+          <div
+            style={{
+              width: "52px", height: "52px",
+              borderRadius: "16px",
+              background: "linear-gradient(135deg, #0ea5e9, #2563eb)",
+              boxShadow: "0 6px 20px rgba(14,165,233,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+            className="mx-auto mb-4"
+          >
+            <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
               <path d="M16 7l7 4v8l-7 4-7-4V11l7-4z" stroke="white" strokeWidth="1.5" fill="none"/>
-              <circle cx="16" cy="16" r="3" fill="white" fillOpacity="0.9"/>
-              <defs><linearGradient id="grad1" x1="0" y1="0" x2="32" y2="32"><stop stopColor="#6366f1"/><stop offset="1" stopColor="#8b5cf6"/></linearGradient></defs>
+              <circle cx="16" cy="16" r="3" fill="white" fillOpacity="0.95"/>
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Create your account</h1>
-          <p className="text-slate-400 text-sm mt-1.5">Join thousands of users on AuthApp</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0f172a" }}>Create your account</h1>
+          <p className="text-sm mt-1.5" style={{ color: "#64748b" }}>Join thousands of users on AuthApp</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Avatar Upload */}
           <div className="flex flex-col items-center mb-2">
             <button type="button" onClick={() => fileRef.current.click()} className="relative group">
-              <div className="w-20 h-20 rounded-full overflow-hidden ring-2 ring-indigo-500/40 ring-offset-2 ring-offset-[#0f0f18] transition-all group-hover:ring-indigo-500">
+              <div
+                style={{ border: "2.5px solid #bae6fd", outline: "3px solid #f0f9ff" }}
+                className="w-20 h-20 rounded-full overflow-hidden transition-all"
+              >
                 {preview ? (
                   <img src={preview} alt="Preview" className="w-full h-full object-cover"/>
                 ) : (
-                  <div className="w-full h-full bg-indigo-500/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#6366f1">
+                  <div style={{ background: "#f0f9ff" }} className="w-full h-full flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#0ea5e9">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                     </svg>
                   </div>
                 )}
               </div>
-              <div className="absolute bottom-0 right-0 w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center border-2 border-[#0f0f18]">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="white">
-                  <path d="M12 5v14M5 12h14"/>
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #0ea5e9, #2563eb)",
+                  border: "2px solid #fff",
+                  boxShadow: "0 2px 6px rgba(14,165,233,0.4)",
+                }}
+                className="absolute bottom-0 right-0 w-6 h-6 rounded-full flex items-center justify-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24">
+                  <path d="M12 5v14M5 12h14" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
                 </svg>
               </div>
             </button>
-            <p className="text-xs text-slate-500 mt-2">Profile photo (optional, max 5MB)</p>
-            {errors.image && <p className="text-red-400 text-xs mt-1">{errors.image}</p>}
+            <p className="text-xs mt-2" style={{ color: "#94a3b8" }}>Profile photo (optional, max 5MB)</p>
+            {errors.image && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>{errors.image}</p>}
             <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} className="hidden"/>
           </div>
 
           {/* Full Name */}
           <div>
-            <label className="field-label">Full Name</label>
-            <input name="fullName" value={form.fullName} onChange={handleChange}
-              placeholder="Full Name" className={`field-input ${errors.fullName ? "field-error" : ""}`}/>
-            {errors.fullName && <p className="field-msg">{errors.fullName}</p>}
+            <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Full Name</label>
+            <input
+              name="fullName" value={form.fullName} onChange={handleChange}
+              placeholder="Full Name"
+              style={{
+                width: "100%", padding: "11px 14px",
+                border: errors.fullName ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
+                borderRadius: "10px", fontSize: "14px",
+                color: "#0f172a", background: errors.fullName ? "#fff7f7" : "#f8fafc",
+                outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+              }}
+              onFocus={e => { e.target.style.borderColor = "#0ea5e9"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(14,165,233,0.1)"; }}
+              onBlur={e => { e.target.style.borderColor = errors.fullName ? "#fca5a5" : "#e2e8f0"; e.target.style.background = errors.fullName ? "#fff7f7" : "#f8fafc"; e.target.style.boxShadow = "none"; }}
+            />
+            {errors.fullName && <p className="text-xs mt-1 flex items-center gap-1" style={{ color: "#ef4444" }}>⚠ {errors.fullName}</p>}
           </div>
 
           {/* Email */}
           <div>
-            <label className="field-label">Email Address</label>
-            <input name="email" type="email" value={form.email} onChange={handleChange}
-              placeholder="you@example.com" className={`field-input ${errors.email ? "field-error" : ""}`}/>
-            {errors.email && <p className="field-msg">{errors.email}</p>}
+            <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Email Address</label>
+            <input
+              name="email" type="email" value={form.email} onChange={handleChange}
+              placeholder="you@example.com"
+              style={{
+                width: "100%", padding: "11px 14px",
+                border: errors.email ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
+                borderRadius: "10px", fontSize: "14px",
+                color: "#0f172a", background: errors.email ? "#fff7f7" : "#f8fafc",
+                outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+              }}
+              onFocus={e => { e.target.style.borderColor = "#0ea5e9"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(14,165,233,0.1)"; }}
+              onBlur={e => { e.target.style.borderColor = errors.email ? "#fca5a5" : "#e2e8f0"; e.target.style.background = errors.email ? "#fff7f7" : "#f8fafc"; e.target.style.boxShadow = "none"; }}
+            />
+            {errors.email && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>⚠ {errors.email}</p>}
           </div>
 
           {/* Phone */}
           <div>
-            <label className="field-label">Phone Number</label>
-            <input name="phone" type="tel" value={form.phone} onChange={handleChange}
-              placeholder="+91 9876543210" className={`field-input ${errors.phone ? "field-error" : ""}`}/>
-            {errors.phone && <p className="field-msg">{errors.phone}</p>}
+            <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Phone Number</label>
+            <input
+              name="phone" type="tel" value={form.phone} onChange={handleChange}
+              placeholder="+91 9876543210"
+              style={{
+                width: "100%", padding: "11px 14px",
+                border: errors.phone ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
+                borderRadius: "10px", fontSize: "14px",
+                color: "#0f172a", background: errors.phone ? "#fff7f7" : "#f8fafc",
+                outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+              }}
+              onFocus={e => { e.target.style.borderColor = "#0ea5e9"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(14,165,233,0.1)"; }}
+              onBlur={e => { e.target.style.borderColor = errors.phone ? "#fca5a5" : "#e2e8f0"; e.target.style.background = errors.phone ? "#fff7f7" : "#f8fafc"; e.target.style.boxShadow = "none"; }}
+            />
+            {errors.phone && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>⚠ {errors.phone}</p>}
           </div>
 
           {/* Age + Password row */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="field-label">Age</label>
-              <input name="age" type="number" value={form.age} onChange={handleChange}
-                placeholder="25" min="13" max="120" className={`field-input ${errors.age ? "field-error" : ""}`}/>
-              {errors.age && <p className="field-msg">{errors.age}</p>}
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Age</label>
+              <input
+                name="age" type="number" value={form.age} onChange={handleChange}
+                placeholder="25" min="13" max="120"
+                style={{
+                  width: "100%", padding: "11px 14px",
+                  border: errors.age ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
+                  borderRadius: "10px", fontSize: "14px",
+                  color: "#0f172a", background: errors.age ? "#fff7f7" : "#f8fafc",
+                  outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                }}
+                onFocus={e => { e.target.style.borderColor = "#0ea5e9"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(14,165,233,0.1)"; }}
+                onBlur={e => { e.target.style.borderColor = errors.age ? "#fca5a5" : "#e2e8f0"; e.target.style.background = errors.age ? "#fff7f7" : "#f8fafc"; e.target.style.boxShadow = "none"; }}
+              />
+              {errors.age && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>⚠ {errors.age}</p>}
             </div>
             <div>
-              <label className="field-label">Password</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Password</label>
               <div className="relative">
-                <input name="password" type={showPassword ? "text" : "password"} value={form.password}
+                <input
+                  name="password" type={showPassword ? "text" : "password"} value={form.password}
                   onChange={handleChange} placeholder="Min. 8 characters"
-                  className={`field-input pr-10 ${errors.password ? "field-error" : ""}`}/>
-                <button type="button" onClick={() => setShowPassword((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors">
+                  style={{
+                    width: "100%", padding: "11px 40px 11px 14px",
+                    border: errors.password ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
+                    borderRadius: "10px", fontSize: "14px",
+                    color: "#0f172a", background: errors.password ? "#fff7f7" : "#f8fafc",
+                    outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                  }}
+                  onFocus={e => { e.target.style.borderColor = "#0ea5e9"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(14,165,233,0.1)"; }}
+                  onBlur={e => { e.target.style.borderColor = errors.password ? "#fca5a5" : "#e2e8f0"; e.target.style.background = errors.password ? "#fff7f7" : "#f8fafc"; e.target.style.boxShadow = "none"; }}
+                />
+                <button
+                  type="button" onClick={() => setShowPassword((p) => !p)}
+                  style={{ color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                >
                   <EyeIcon show={showPassword}/>
                 </button>
               </div>
-              {errors.password && <p className="field-msg">{errors.password}</p>}
+              {errors.password && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>⚠ {errors.password}</p>}
             </div>
           </div>
 
@@ -170,10 +259,14 @@ export default function SignupPage() {
                   /[0-9]/.test(form.password),
                   /[^A-Za-z0-9]/.test(form.password),
                 ].map((ok, i) => (
-                  <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${ok ? "bg-indigo-500" : "bg-slate-700"}`}/>
+                  <div
+                    key={i}
+                    style={{ background: ok ? "#0ea5e9" : "#e2e8f0", transition: "background 0.3s" }}
+                    className="h-1 flex-1 rounded-full"
+                  />
                 ))}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs" style={{ color: "#64748b" }}>
                 {form.password.length < 8 ? "Too short" :
                  /[^A-Za-z0-9]/.test(form.password) ? "Strong password 💪" :
                  /[0-9]/.test(form.password) && /[A-Z]/.test(form.password) ? "Good password" : "Add numbers & symbols"}
@@ -181,16 +274,39 @@ export default function SignupPage() {
             </div>
           )}
 
-          <button type="submit" disabled={isLoading} className="btn-primary w-full mt-2">
-            {isLoading ? <span className="flex items-center justify-center gap-2"><span className="loader"/> Creating account...</span> : "Create Account →"}
+          <button
+            type="submit" disabled={isLoading}
+            style={{
+              width: "100%", padding: "12px",
+              background: "linear-gradient(135deg, #0ea5e9, #2563eb)",
+              color: "#fff", border: "none", borderRadius: "10px",
+              fontSize: "14px", fontWeight: "600", cursor: isLoading ? "not-allowed" : "pointer",
+              boxShadow: "0 4px 14px rgba(14,165,233,0.35)",
+              opacity: isLoading ? 0.7 : 1, fontFamily: "inherit", letterSpacing: "0.01em",
+            }}
+            className="mt-2"
+          >
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"
+                  style={{ animation: "spin 1s linear infinite" }}>
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Creating account...
+              </span>
+            ) : "Create Account →"}
           </button>
         </form>
 
-        <p className="text-center text-sm text-slate-500 mt-6">
+        <p className="text-center text-sm mt-6" style={{ color: "#94a3b8" }}>
           Already have an account?{" "}
-          <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">Sign in</Link>
+          <Link to="/login" style={{ color: "#0ea5e9", fontWeight: "500", textDecoration: "none" }}>
+            Sign in
+          </Link>
         </p>
       </div>
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
