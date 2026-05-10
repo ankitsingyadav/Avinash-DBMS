@@ -52,7 +52,7 @@ export default function OrganisationPage() {
           <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-4 py-1.5 mb-5">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
             <span className="text-indigo-400 text-xs font-semibold uppercase tracking-widest">
-              Admin Panel · Organisation Management
+              Admin Panel· Organisation Management
             </span>
           </div>
           <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">
