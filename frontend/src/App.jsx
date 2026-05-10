@@ -21,7 +21,7 @@ const OrganisationPage     = lazy(() => import("./pages/OrganisationPage"));
 const VolunteerFormPage    = lazy(() => import("./pages/VolunteerFormPage"));
 const OrganisationFormPage = lazy(() => import("./pages/OrganisationFormPage"));
 const AccessControlPage    = lazy(() => import("./pages/AccessControlPage"));
-const NotificationsPage    = lazy(() => import("./pages/NotificationsPage")); // ← NEW
+const Notificationspage    = lazy(() => import("./pages/Notificationspage")); // ← NEW
 
 // ── Page loader ────────────────────────────────────────────────
 function PageLoader() {
@@ -148,7 +148,7 @@ export default function App() {
 
           {/* ── NEW: Notifications page ── */}
           <Route path="/notifications"
-            element={<NotificationsOnly><NotificationsPage /></NotificationsOnly>}
+            element={<NotificationsOnly><Notificationspage /></NotificationsOnly>}
           />
 
           <Route path="*" element={<Navigate to="/" replace />} />
