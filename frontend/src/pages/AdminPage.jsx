@@ -15,7 +15,7 @@ import EditModal                   from "../admin/components/EditModal.jsx";
 import ViewModal                   from "../admin/components/ViewModal.jsx";
 import ImportModal                 from "../admin/components/ImportModal.jsx";
 import DataTable                   from "../admin/components/DataTable.jsx";
-import Interactionhistorymodal     from "../admin/components/interactionhistorymodal.jsx";
+import Interactionhistorymodal     from "../admin/components/Interactionhistorymodal.jsx";
 import useAuthStore, { roleHelpers } from "../context/authStore.js";
 import AddInteractionModal from "../admin/components/Addinteractionmodal.jsx";
 
