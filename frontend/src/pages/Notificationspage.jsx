@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
-import Navbar from "../components/Navbar";
+import Navbar from "../components/Navbar.jsx";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const getTimeRemaining = (date) => {
   const now    = Date.now();
