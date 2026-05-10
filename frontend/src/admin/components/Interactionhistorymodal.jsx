@@ -1,4 +1,4 @@
-// ─── admin/components/InteractionHistoryModal.jsx ────────────────────────────
+// ─── admin/components/Interactionhistorymodal.jsx ────────────────────────────
 import { useState, useEffect } from "react";
 import axios from "../../utils/axios.js";
 import { fmtDate } from "../helpers.js";
