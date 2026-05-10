@@ -402,7 +402,7 @@ const list = res.data?.interactions || [];
         title={`Delete ${selectedIds.size} Records?`}
         message={`${selectedIds.size} selected records will be permanently deleted. This action cannot be undone.`}
       />
-      <InteractionHistoryModal
+      <Interactionhistorymodal
         isOpen={!!interactionHistoryRecord}
         onClose={() => setInteractionHistoryRecord(null)}
         record={interactionHistoryRecord}

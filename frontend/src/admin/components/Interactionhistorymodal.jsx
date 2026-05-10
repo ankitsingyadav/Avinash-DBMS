@@ -115,7 +115,7 @@ function InteractionCard({ entry, index, total, accent }) {
   );
 }
 
-export default function InteractionHistoryModal({ isOpen, onClose, record, category, onAddNew }) {
+export default function Interactionhistorymodal({ isOpen, onClose, record, category, onAddNew }) {
   const [history,  setHistory]  = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
