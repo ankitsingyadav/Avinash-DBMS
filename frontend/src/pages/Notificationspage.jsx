@@ -1,4 +1,4 @@
-// ─── pages/NotificationsPage.jsx ─────────────────────────────────────────────
+// ─── pages/Notificationspage.jsx ─────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
@@ -308,7 +308,7 @@ function TimeProgress({ pct, color, overdue }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function NotificationsPage() {
+export default function Notificationspage() {
     
   const navigate = useNavigate();
 
