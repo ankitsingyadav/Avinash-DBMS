@@ -26,7 +26,7 @@ function Counter({ value, duration = 1200 }) {
 function ProgressBar({ value, total, color }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div className="flex-1 h-1 rounded-full bg-slate-800/80 overflow-hidden">
+    <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
       <div
         className="h-full rounded-full transition-all duration-700"
         style={{ width: `${pct}%`, background: color }}
@@ -35,11 +35,7 @@ function ProgressBar({ value, total, color }) {
   );
 }
 
-// ─── MERGED ORG CARD (School + College + NGO) ─────────────────────────────────
-// ─── MERGED ORG CARD (School + College + NGO) ─────────────────────────────────
-// FIXED: Correct API endpoints use /organisations?centreType=X
-//        Breakdowns removed (no sub-type field in DB)
-// ─── MERGED ORG CARD (All 6 centreTypes in 3+3 grid) ────────────────────────
+// ─── MERGED ORG CARD ─────────────────────────────────────────────────────────
 function MergedOrgCard({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -50,7 +46,8 @@ function MergedOrgCard({ onNavigate }) {
       label:      "Schools",
       centreType: "School",
       accent:     "#6366f1",
-      bg:         "rgba(99,102,241,0.10)",
+      bg:         "#f5f3ff",
+      border:     "#c7d2fe",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0v6m-4-4v4m8-4v4M3 21h18"/>
@@ -62,7 +59,8 @@ function MergedOrgCard({ onNavigate }) {
       label:      "Colleges",
       centreType: "College",
       accent:     "#0ea5e9",
-      bg:         "rgba(14,165,233,0.10)",
+      bg:         "#f0f9ff",
+      border:     "#bae6fd",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4"/>
@@ -74,7 +72,8 @@ function MergedOrgCard({ onNavigate }) {
       label:      "NGOs",
       centreType: "NGO",
       accent:     "#10b981",
-      bg:         "rgba(16,185,129,0.10)",
+      bg:         "#f0fdf4",
+      border:     "#a7f3d0",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
@@ -86,7 +85,8 @@ function MergedOrgCard({ onNavigate }) {
       label:      "Corporate",
       centreType: "Corporate",
       accent:     "#f59e0b",
-      bg:         "rgba(245,158,11,0.10)",
+      bg:         "#fffbeb",
+      border:     "#fde68a",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
@@ -98,7 +98,8 @@ function MergedOrgCard({ onNavigate }) {
       label:      "Online",
       centreType: "Online",
       accent:     "#ec4899",
-      bg:         "rgba(236,72,153,0.10)",
+      bg:         "#fdf2f8",
+      border:     "#fbcfe8",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253M3 12c0 .778.099 1.533.284 2.253"/>
@@ -110,7 +111,8 @@ function MergedOrgCard({ onNavigate }) {
       label:      "Community",
       centreType: "Community Centre",
       accent:     "#f97316",
-      bg:         "rgba(249,115,22,0.10)",
+      bg:         "#fff7ed",
+      border:     "#fed7aa",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/>
@@ -128,12 +130,8 @@ function MergedOrgCard({ onNavigate }) {
               axios.get(`/organisations?limit=1&centreType=${encodeURIComponent(sec.centreType)}`),
               axios.get(`/organisations?limit=1&centreType=${encodeURIComponent(sec.centreType)}&status=Active`),
             ]);
-
             const getTotal = (r) =>
-              r?.data?.data?.total ??
-              r?.data?.total ??
-              0;
-
+              r?.data?.data?.total ?? r?.data?.total ?? 0;
             return {
               key:    sec.key,
               total:  getTotal(totalRes),
@@ -141,7 +139,6 @@ function MergedOrgCard({ onNavigate }) {
             };
           })
         );
-
         const map = {};
         results.forEach((r) => { map[r.key] = r; });
         setStats(map);
@@ -165,9 +162,9 @@ function MergedOrgCard({ onNavigate }) {
     <div
       className="group relative rounded-2xl p-5 cursor-default transition-all duration-200"
       style={{
-        background: "rgba(30,41,59,0.45)",
-        border: "1px solid rgba(99,102,241,0.18)",
-        boxShadow: "0 4px 32px rgba(99,102,241,0.08)",
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
       }}
     >
       {/* Header */}
@@ -177,9 +174,9 @@ function MergedOrgCard({ onNavigate }) {
             Organisations
           </p>
           <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-white tracking-tight">
+            <p className="text-3xl font-bold text-slate-800 tracking-tight">
               {loading ? (
-                <span className="inline-block w-16 h-8 bg-slate-800/80 rounded-lg animate-pulse" />
+                <span className="inline-block w-16 h-8 bg-slate-200 rounded-lg animate-pulse" />
               ) : (
                 <Counter value={grandTotal} />
               )}
@@ -187,13 +184,13 @@ function MergedOrgCard({ onNavigate }) {
             <span className="text-sm text-slate-500 font-medium">total</span>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           Live
         </div>
       </div>
 
-      {/* 3+3 Grid — Row 1: School, College, NGO | Row 2: Corporate, Online, Community */}
+      {/* 3+3 Grid */}
       <div className="grid grid-cols-3 gap-3">
         {SECTIONS.map((sec) => {
           const s        = stats?.[sec.key];
@@ -203,10 +200,10 @@ function MergedOrgCard({ onNavigate }) {
             <button
               key={sec.key}
               onClick={() => onNavigate(sec.key)}
-              className="group/sec rounded-xl p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg"
+              className="group/sec rounded-xl p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
               style={{
                 background: sec.bg,
-                border: `1px solid ${sec.accent}25`,
+                border: `1px solid ${sec.border}`,
               }}
             >
               {/* Icon + Label */}
@@ -218,9 +215,9 @@ function MergedOrgCard({ onNavigate }) {
               </div>
 
               {/* Total count */}
-              <p className="text-2xl font-bold text-white mb-2">
+              <p className="text-2xl font-bold text-slate-800 mb-2">
                 {loading ? (
-                  <span className="inline-block w-10 h-6 bg-slate-800/80 rounded animate-pulse" />
+                  <span className="inline-block w-10 h-6 bg-slate-200 rounded animate-pulse" />
                 ) : (
                   <Counter value={s?.total ?? 0} />
                 )}
@@ -228,30 +225,30 @@ function MergedOrgCard({ onNavigate }) {
 
               {/* Active / Inactive pills */}
               {loading ? (
-                <div className="h-5 w-20 bg-slate-800/80 rounded-full animate-pulse" />
+                <div className="h-5 w-20 bg-slate-200 rounded-full animate-pulse" />
               ) : s ? (
                 <div className="flex flex-col gap-1.5">
                   <span
                     className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium w-fit"
                     style={{
                       background: "rgba(16,185,129,0.10)",
-                      border:     "1px solid rgba(16,185,129,0.20)",
-                      color:      "#34d399",
+                      border:     "1px solid rgba(16,185,129,0.25)",
+                      color:      "#059669",
                     }}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     {s.active} Active
                   </span>
                   {inactive > 0 && (
                     <span
                       className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium w-fit"
                       style={{
-                        background: "rgba(100,116,139,0.15)",
-                        border:     "1px solid rgba(100,116,139,0.20)",
-                        color:      "#94a3b8",
+                        background: "#f1f5f9",
+                        border:     "1px solid #cbd5e1",
+                        color:      "#64748b",
                       }}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                       {inactive} Inactive
                     </span>
                   )}
@@ -275,14 +272,13 @@ function MergedOrgCard({ onNavigate }) {
     </div>
   );
 }
-// ─── VOLUNTEER CARD (standalone) ──────────────────────────────────────────────
+
+// ─── VOLUNTEER CARD ───────────────────────────────────────────────────────────
 function VolunteerCard({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const accent  = "#f59e0b";
-  const bg      = "rgba(245,158,11,0.08)";
-  const border  = "rgba(245,158,11,0.18)";
   const breakdowns = [
     { key: "area_of_interest", value: "Teaching",    label: "Teaching",    color: "#6366f1" },
     { key: "area_of_interest", value: "Tech",        label: "Tech",        color: "#0ea5e9" },
@@ -320,31 +316,31 @@ function VolunteerCard({ onNavigate }) {
   return (
     <div
       onClick={() => onNavigate("volunteer")}
-      className="group relative rounded-2xl p-5 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
+      className="group relative rounded-2xl p-5 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
       style={{
-        background: bg,
-        border: `1px solid ${border}`,
-        boxShadow: `0 4px 24px ${accent}10`,
+        background: "#ffffff",
+        border: `1px solid #fde68a`,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
       }}
     >
       {/* Hover glow */}
       <div
         className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-        style={{ background: `radial-gradient(ellipse at 50% 0%, ${accent}12, transparent 70%)` }}
+        style={{ background: `radial-gradient(ellipse at 50% 0%, ${accent}08, transparent 70%)` }}
       />
 
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div
           className="w-11 h-11 rounded-xl flex items-center justify-center"
-          style={{ background: `${accent}15`, border: `1px solid ${accent}25` }}>
+          style={{ background: "#fffbeb", border: `1px solid #fde68a` }}>
           <span style={{ color: accent }}>
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 group-hover:text-slate-400 transition-colors">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 group-hover:text-slate-700 transition-colors">
           View all
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
@@ -354,9 +350,9 @@ function VolunteerCard({ onNavigate }) {
 
       {/* Total */}
       <div className="mb-1">
-        <p className="text-3xl font-bold text-white tracking-tight">
+        <p className="text-3xl font-bold text-slate-800 tracking-tight">
           {loading ? (
-            <span className="inline-block w-16 h-8 bg-slate-800/80 rounded-lg animate-pulse" />
+            <span className="inline-block w-16 h-8 bg-slate-200 rounded-lg animate-pulse" />
           ) : (
             <Counter value={stats?.total ?? 0} />
           )}
@@ -367,13 +363,19 @@ function VolunteerCard({ onNavigate }) {
       {/* Active / Inactive pills */}
       {!loading && stats && (
         <div className="flex items-center gap-2 mb-4">
-          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span
+            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+            style={{ background: "#f0fdf4", color: "#059669", border: "1px solid #a7f3d0" }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             {stats.active} Active
           </span>
           {inactive > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-slate-700/50 text-slate-500 border border-slate-700/40">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+            <span
+              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #cbd5e1" }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
               {inactive} Inactive
             </span>
           )}
@@ -381,12 +383,12 @@ function VolunteerCard({ onNavigate }) {
       )}
 
       {/* Breakdown bars */}
-      <div className="space-y-2.5 border-t border-slate-800/40 pt-3">
+      <div className="space-y-2.5 border-t border-slate-100 pt-3">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="space-y-1">
-              <div className="h-2.5 w-24 bg-slate-800/80 rounded animate-pulse" />
-              <div className="h-1 w-full bg-slate-800/80 rounded animate-pulse" />
+              <div className="h-2.5 w-24 bg-slate-200 rounded animate-pulse" />
+              <div className="h-1.5 w-full bg-slate-200 rounded animate-pulse" />
             </div>
           ))
         ) : (
@@ -413,18 +415,18 @@ function QuickAction({ icon, label, sublabel, onClick, accent }) {
     <button
       onClick={onClick}
       className="group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-150 hover:translate-x-1"
-      style={{ background: "rgba(30,41,59,0.4)", border: "1px solid rgba(51,65,85,0.3)" }}>
+      style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
       <div
         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors"
-        style={{ background: `${accent}15`, border: `1px solid ${accent}20` }}>
+        style={{ background: `${accent}15`, border: `1px solid ${accent}30` }}>
         <span style={{ color: accent }}>{icon}</span>
       </div>
       <div className="text-left min-w-0">
-        <p className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors">{label}</p>
-        {sublabel && <p className="text-xs text-slate-600 truncate">{sublabel}</p>}
+        <p className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors">{label}</p>
+        {sublabel && <p className="text-xs text-slate-400 truncate">{sublabel}</p>}
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-        className="ml-auto text-slate-700 group-hover:text-slate-400 shrink-0 transition-colors">
+        className="ml-auto text-slate-300 group-hover:text-slate-500 shrink-0 transition-colors">
         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
       </svg>
     </button>
@@ -432,13 +434,6 @@ function QuickAction({ icon, label, sublabel, onClick, accent }) {
 }
 
 // ─── Follow-up reminder card ──────────────────────────────────────────────────
-// ─── Follow-up reminder card ──────────────────────────────────────────────────
-// FIXED:
-//   1. /organisations/schools → /organisations?centreType=School
-//   2. /organisations/colleges → /organisations?centreType=College
-//   3. /organisations/ngos → /organisations?centreType=NGO
-//   4. Removed follow_up_date (field doesn't exist in Organisation model)
-//   5. Sort by createdAt instead
 function FollowUpCard({ onNavigate }) {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -451,7 +446,6 @@ function FollowUpCard({ onNavigate }) {
       {
         label:  "School",
         tab:    "school",
-        // ✅ FIXED: use /organisations?centreType=School
         url:    `/organisations?limit=3&centreType=School&dateFrom=${weekAgo}&dateTo=${today}&sortField=createdAt&sortDir=desc`,
         dataKey: "organisations",
         accent: "#6366f1",
@@ -518,38 +512,37 @@ function FollowUpCard({ onNavigate }) {
             });
           });
         });
-
-        // Sort by createdAt descending (newest first)
         all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         setItems(all.slice(0, 6));
       })
       .finally(() => setLoading(false));
   }, []);
 
-  // Format date
   const fmtDate = (d) =>
     new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 
-  // Check if added in last 24 hours
   const isNew = (d) =>
     new Date(d) > new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   if (!loading && items.length === 0) return null;
 
   return (
-    <div className="auth-card">
+    <div
+      className="rounded-2xl p-5"
+      style={{ background: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <h3 className="text-sm font-semibold text-white">Recently Added</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Recently Added</h3>
         </div>
-        <span className="text-xs text-slate-500">Last 7 days</span>
+        <span className="text-xs text-slate-400">Last 7 days</span>
       </div>
 
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-10 bg-slate-800/60 rounded-xl animate-pulse" />
+            <div key={i} className="h-10 bg-slate-100 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
@@ -561,7 +554,7 @@ function FollowUpCard({ onNavigate }) {
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:translate-x-0.5 text-left group"
               style={{
                 background: `${item._accent}08`,
-                border:     `1px solid ${item._accent}18`,
+                border:     `1px solid ${item._accent}25`,
               }}
             >
               <div
@@ -569,18 +562,17 @@ function FollowUpCard({ onNavigate }) {
                 style={{ background: item._accent }}
               />
               <div className="flex-1 min-w-0">
-                {/* Organisation uses centreName, Volunteer uses name */}
-                <p className="text-sm font-medium text-white truncate">
+                <p className="text-sm font-medium text-slate-700 truncate">
                   {item.centreName ?? item.name}
                 </p>
-                <p className="text-xs text-slate-500">{item._catLabel}</p>
+                <p className="text-xs text-slate-400">{item._catLabel}</p>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-xs font-semibold text-slate-400">
+                <p className="text-xs font-semibold text-slate-500">
                   {fmtDate(item.createdAt)}
                 </p>
                 {isNew(item.createdAt) && (
-                  <p className="text-[10px] text-emerald-400 font-medium">New</p>
+                  <p className="text-[10px] text-emerald-600 font-medium">New</p>
                 )}
               </div>
             </button>
@@ -631,7 +623,7 @@ export default function DashboardPage() {
   const isAdmin   = user?.role === "admin";
 
   return (
-    <div className="auth-bg min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: "#f8f9fc" }}>
       <Navbar />
 
       <div className="max-w-5xl mx-auto px-4 py-8 w-full flex-1">
@@ -642,7 +634,7 @@ export default function DashboardPage() {
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest mb-0.5">
               {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
             </p>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-slate-800">
               Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"},{" "}
               <span style={{ color: "#6366f1" }}>{user?.fullName?.split(" ")[0]}</span> 👋
             </h1>
@@ -651,7 +643,7 @@ export default function DashboardPage() {
             <button
               onClick={() => navigate("/admin")}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
-              style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", boxShadow: "0 4px 20px rgba(99,102,241,0.25)" }}>
+              style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", boxShadow: "0 4px 20px rgba(99,102,241,0.20)" }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0H3"/>
               </svg>
@@ -666,21 +658,24 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4">
 
             {/* Profile card */}
-            <div className="auth-card">
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+            >
               <div className="flex items-start gap-4 mb-5">
                 <div className="relative shrink-0">
-                  <div className="w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-indigo-500/30">
+                  <div className="w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-indigo-200">
                     {avatarUrl ? (
                       <img src={avatarUrl} alt={user?.fullName} className="w-full h-full object-cover"/>
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center">
+                      <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
                         <span className="text-white text-lg font-bold">{initials}</span>
                       </div>
                     )}
                   </div>
                   {editMode && (
                     <button type="button" onClick={() => fileRef.current.click()}
-                      className="absolute -bottom-1 -right-1 w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center border-2 border-[#0f0f18] hover:bg-indigo-500 transition-colors">
+                      className="absolute -bottom-1 -right-1 w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center border-2 border-white hover:bg-indigo-500 transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2.5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/>
@@ -692,17 +687,17 @@ export default function DashboardPage() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <h2 className="text-base font-bold text-white truncate">{user?.fullName}</h2>
+                    <h2 className="text-base font-bold text-slate-800 truncate">{user?.fullName}</h2>
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${
                       isAdmin
-                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                        : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                        ? "bg-amber-50 text-amber-700 border border-amber-200"
+                        : "bg-indigo-50 text-indigo-700 border border-indigo-200"
                     }`}>
                       {user?.role?.toUpperCase()}
                     </span>
                   </div>
-                  <p className="text-slate-400 text-xs truncate">{user?.email}</p>
-                  <p className="text-slate-500 text-xs">{user?.phone}</p>
+                  <p className="text-slate-500 text-xs truncate">{user?.email}</p>
+                  <p className="text-slate-400 text-xs">{user?.phone}</p>
                 </div>
               </div>
 
@@ -713,9 +708,9 @@ export default function DashboardPage() {
                   { label: "Joined", value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "2-digit" }) : "—" },
                   { label: "Login",  value: user?.lastLogin  ? new Date(user.lastLogin).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "Today" },
                 ].map((s) => (
-                  <div key={s.label} className="bg-slate-800/40 rounded-xl p-2.5 border border-slate-700/30 text-center">
-                    <p className="text-white font-semibold text-sm">{s.value}</p>
-                    <p className="text-slate-500 text-xs mt-0.5">{s.label}</p>
+                  <div key={s.label} className="bg-slate-50 rounded-xl p-2.5 border border-slate-200 text-center">
+                    <p className="text-slate-800 font-semibold text-sm">{s.value}</p>
+                    <p className="text-slate-400 text-xs mt-0.5">{s.label}</p>
                   </div>
                 ))}
               </div>
@@ -725,14 +720,14 @@ export default function DashboardPage() {
                 onClick={() => setEditMode((p) => !p)}
                 className={`w-full text-sm px-3.5 py-2 rounded-lg font-medium transition-all ${
                   editMode
-                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20"
+                    ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    : "bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100"
                 }`}>
                 {editMode ? "Cancel" : "Edit Profile"}
               </button>
 
               {editMode && (
-                <form onSubmit={handleUpdate} className="space-y-3 pt-4 mt-3 border-t border-slate-700/50">
+                <form onSubmit={handleUpdate} className="space-y-3 pt-4 mt-3 border-t border-slate-100">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="field-label">Full Name</label>
@@ -758,7 +753,10 @@ export default function DashboardPage() {
 
             {/* Quick actions */}
             {isAdmin && (
-              <div className="auth-card">
+              <div
+                className="rounded-2xl p-5"
+                style={{ background: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+              >
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</p>
                 <div className="space-y-2">
                   <QuickAction
@@ -780,24 +778,27 @@ export default function DashboardPage() {
             )}
 
             {/* Security card */}
-            <div className="auth-card">
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+            >
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Security</h3>
-              <div className="flex items-center justify-between py-2.5 border-b border-slate-800/60">
+              <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
                 <div>
-                  <p className="text-sm text-slate-200 font-medium">Password</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Change your account password</p>
+                  <p className="text-sm text-slate-700 font-medium">Password</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Change your account password</p>
                 </div>
-                <button onClick={() => navigate("/login")} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                <button onClick={() => navigate("/login")} className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors">
                   Change →
                 </button>
               </div>
               <div className="flex items-center justify-between py-2.5">
                 <div>
-                  <p className="text-sm text-slate-200 font-medium">Account Status</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Your account is active and secure</p>
+                  <p className="text-sm text-slate-700 font-medium">Account Status</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Your account is active and secure</p>
                 </div>
-                <span className="text-xs text-emerald-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>
+                <span className="text-xs text-emerald-600 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>
                   Active
                 </span>
               </div>
@@ -810,29 +811,29 @@ export default function DashboardPage() {
             {/* Section header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-white">Organisation Overview</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click any section to open it in the admin panel</p>
+                <h2 className="text-base font-bold text-slate-800">Organisation Overview</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Click any section to open it in the admin panel</p>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>
                 Live data
               </div>
             </div>
 
-            {/* Merged Org Card (Schools + Colleges + NGOs) */}
+            {/* Merged Org Card */}
             <MergedOrgCard onNavigate={handleCardClick} />
 
             {/* Volunteer Card */}
             <VolunteerCard onNavigate={handleCardClick} />
 
-            {/* Follow-up reminder */}
+            {/* Recently Added */}
             <FollowUpCard onNavigate={handleCardClick} />
           </div>
         </div>
       </div>
 
-      <footer className="border-t border-slate-800/60 py-5 text-center mt-6">
-        <p className="text-slate-600 text-xs">© {new Date().getFullYear()} DB Manager. All rights reserved.</p>
+      <footer className="border-t border-slate-200 py-5 text-center mt-6">
+        <p className="text-slate-400 text-xs">© {new Date().getFullYear()} DB Manager. All rights reserved.</p>
       </footer>
     </div>
   );
