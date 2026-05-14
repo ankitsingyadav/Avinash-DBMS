@@ -28,7 +28,6 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
   const [errors,  setErrors]  = useState({});
   const [loading, setLoading] = useState(false);
 
-  // Reset form whenever modal opens with a new record
   useEffect(() => {
     if (isOpen) {
       setForm(EMPTY_FORM);
@@ -60,7 +59,6 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
       toast.error("Please fill in all required fields.");
       return;
     }
-
     setLoading(true);
     try {
       const payload = {
@@ -69,9 +67,9 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
         interactionDate: form.interactionDate,
         interactionMode: form.interactionMode,
       };
-      if (form.notes.trim())               payload.notes               = form.notes.trim();
-      if (form.ninAin.trim())              payload.ninAin              = form.ninAin.trim();
-      if (form.nextInteractionDate)        payload.nextInteractionDate = form.nextInteractionDate;
+      if (form.notes.trim())        payload.notes               = form.notes.trim();
+      if (form.ninAin.trim())       payload.ninAin              = form.ninAin.trim();
+      if (form.nextInteractionDate) payload.nextInteractionDate = form.nextInteractionDate;
 
       await axios.post(`${category.endpoint}/${record._id}/interactions`, payload);
       toast.success("Interaction recorded successfully!");
@@ -86,31 +84,30 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={!loading ? onClose : undefined} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={!loading ? onClose : undefined} />
 
-      <div className="relative w-full max-w-lg bg-[#13131f] border border-slate-700/50 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: `${accent}15`, border: `1px solid ${accent}30` }}
+              style={{ background: `${accent}15`, border: `1.5px solid ${accent}30` }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke={accent} strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
               </svg>
             </div>
             <div>
-              <h3 className="text-white font-bold text-sm">Add Interaction</h3>
-              <p className="text-slate-600 text-xs truncate max-w-[260px]">{record.centreName}</p>
+              <h3 className="text-slate-900 font-bold text-sm">Add Interaction</h3>
+              <p className="text-slate-500 text-xs truncate max-w-[260px]">{record.centreName}</p>
             </div>
           </div>
-
           {!loading && (
             <button
               onClick={onClose}
-              className="text-slate-600 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+              className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -120,9 +117,9 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5 bg-slate-50">
 
-          {/* ── Current Interaction section ── */}
+          {/* Current Interaction */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span
@@ -131,15 +128,14 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
               >
                 Current Interaction
               </span>
-              <div className="flex-1 h-px bg-slate-800" />
+              <div className="flex-1 h-px bg-slate-200" />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-              {/* Interaction By */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Interaction By <span className="text-red-400">*</span>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Interaction By <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -148,13 +144,12 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                   placeholder="Your name"
                   className={inputCls(!!errors.interactionBy)}
                 />
-                {errors.interactionBy && <p className="text-red-400 text-xs">{errors.interactionBy}</p>}
+                {errors.interactionBy && <p className="text-red-500 text-xs">{errors.interactionBy}</p>}
               </div>
 
-              {/* Interacted With */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Interacted With <span className="text-red-400">*</span>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Interacted With <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -163,27 +158,25 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                   placeholder="Contact person name"
                   className={inputCls(!!errors.interactedWith)}
                 />
-                {errors.interactedWith && <p className="text-red-400 text-xs">{errors.interactedWith}</p>}
+                {errors.interactedWith && <p className="text-red-500 text-xs">{errors.interactedWith}</p>}
               </div>
 
-              {/* Interaction Date */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Interaction Date <span className="text-red-400">*</span>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Interaction Date <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
                   value={form.interactionDate}
                   onChange={(e) => set("interactionDate", e.target.value)}
                   max={new Date().toISOString().split("T")[0]}
-                  className={inputCls(!!errors.interactionDate) + " [color-scheme:dark]"}
+                  className={inputCls(!!errors.interactionDate)}
                 />
-                {errors.interactionDate && <p className="text-red-400 text-xs">{errors.interactionDate}</p>}
+                {errors.interactionDate && <p className="text-red-500 text-xs">{errors.interactionDate}</p>}
               </div>
 
-              {/* AIN / NIN */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">AIN / NIN Number</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">AIN / NIN Number</label>
                 <input
                   type="text"
                   value={form.ninAin}
@@ -193,9 +186,8 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                 />
               </div>
 
-              {/* Notes — full width */}
               <div className="sm:col-span-2 space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Notes</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</label>
                 <textarea
                   rows={3}
                   value={form.notes}
@@ -207,7 +199,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
             </div>
           </div>
 
-          {/* ── Next Interaction section ── */}
+          {/* Next Interaction */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span
@@ -216,27 +208,25 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
               >
                 Next Interaction Planned
               </span>
-              <div className="flex-1 h-px bg-slate-800" />
+              <div className="flex-1 h-px bg-slate-200" />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-              {/* Next Interaction Date */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Planned Date</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Planned Date</label>
                 <input
                   type="date"
                   value={form.nextInteractionDate}
                   onChange={(e) => set("nextInteractionDate", e.target.value)}
                   min={new Date().toISOString().split("T")[0]}
-                  className={inputCls(false) + " [color-scheme:dark]"}
+                  className={inputCls(false)}
                 />
               </div>
 
-              {/* Interaction Mode */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Interaction Mode <span className="text-red-400">*</span>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Interaction Mode <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {INTERACTION_MODES.map((mode) => {
@@ -249,8 +239,8 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                         className="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold transition-all"
                         style={
                           active
-                            ? { background: `${accent}18`, color: accent, borderColor: `${accent}40` }
-                            : { background: "#1a1a2e", color: "#475569", borderColor: "#1e293b" }
+                            ? { background: `${accent}12`, color: accent, borderColor: `${accent}50`, boxShadow: `0 0 0 2px ${accent}20` }
+                            : { background: "#fff", color: "#64748b", borderColor: "#e2e8f0" }
                         }
                       >
                         <span>{MODE_ICONS[mode]}</span>
@@ -260,7 +250,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                   })}
                 </div>
                 {errors.interactionMode && (
-                  <p className="text-red-400 text-xs">{errors.interactionMode}</p>
+                  <p className="text-red-500 text-xs">{errors.interactionMode}</p>
                 )}
               </div>
             </div>
@@ -268,21 +258,21 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-6 py-4 border-t border-slate-800 shrink-0">
+        <div className="flex gap-3 px-6 py-4 border-t border-slate-100 shrink-0 bg-white">
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all disabled:opacity-50"
+            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-all disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 shadow-sm"
             style={{
-              background:  `linear-gradient(135deg,${accent},${accent}cc)`,
-              boxShadow:   `0 4px 15px ${accent}25`,
+              background: accent,
+              boxShadow: `0 4px 12px ${accent}35`,
             }}
           >
             {loading && (

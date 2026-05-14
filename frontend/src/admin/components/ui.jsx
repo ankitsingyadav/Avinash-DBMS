@@ -1,25 +1,23 @@
 // ─── admin/components/ui.jsx ──────────────────────────────────────────────────
 
-// Data completion status (replaces old Active/Inactive status)
 const DATA_STATUS_COLORS = {
-  "Complete": { bg: "rgba(16,185,129,0.12)",  text: "#10b981", dot: "#10b981" },
-  "Partial":  { bg: "rgba(245,158,11,0.13)",  text: "#f59e0b", dot: "#f59e0b" },
-  "Basic":    { bg: "rgba(99,102,241,0.13)",   text: "#818cf8", dot: "#6366f1" },
+  "Complete": { bg: "#d1fae5", text: "#065f46", dot: "#10b981", border: "#6ee7b7" },
+  "Partial":  { bg: "#fef3c7", text: "#92400e", dot: "#f59e0b", border: "#fcd34d" },
+  "Basic":    { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", border: "#93c5fd" },
 };
 
-// Legacy Active/Inactive (kept for volunteer status, etc.)
 const STATUS_COLORS = {
-  "Active":     { bg: "rgba(16,185,129,0.12)",  text: "#10b981", dot: "#10b981" },
-  "Inactive":   { bg: "rgba(100,116,139,0.15)", text: "#64748b", dot: "#475569" },
-  "Not Active": { bg: "rgba(239,68,68,0.12)",   text: "#f87171", dot: "#ef4444" },
+  "Active":     { bg: "#d1fae5", text: "#065f46", dot: "#10b981", border: "#6ee7b7" },
+  "Inactive":   { bg: "#f1f5f9", text: "#475569", dot: "#94a3b8", border: "#cbd5e1" },
+  "Not Active": { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", border: "#fca5a5" },
 };
 
 export function StatusBadge({ value }) {
   const c = STATUS_COLORS[value] || STATUS_COLORS["Inactive"];
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
-      style={{ background: c.bg, color: c.text }}
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.dot }} />
       {value || "—"}
@@ -31,8 +29,8 @@ export function DataStatusBadge({ value }) {
   const c = DATA_STATUS_COLORS[value] || DATA_STATUS_COLORS["Basic"];
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
-      style={{ background: c.bg, color: c.text }}
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.dot }} />
       {value || "Basic"}
@@ -41,11 +39,15 @@ export function DataStatusBadge({ value }) {
 }
 
 export function TypeBadge({ value, accent }) {
-  if (!value) return <span className="text-slate-700 text-xs">—</span>;
+  if (!value) return <span className="text-slate-400 text-xs">—</span>;
   return (
     <span
-      className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap"
-      style={{ background: `${accent}15`, color: accent, border: `1px solid ${accent}25` }}
+      className="inline-block px-2.5 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap"
+      style={{
+        background: `${accent}18`,
+        color: accent,
+        border: `1px solid ${accent}35`,
+      }}
     >
       {value}
     </span>
@@ -62,8 +64,8 @@ export function HighlightText({ text, query }) {
       {str.slice(0, idx)}
       <mark
         style={{
-          background: "rgba(250,204,21,0.25)",
-          color: "#fde68a",
+          background: "#fef08a",
+          color: "#713f12",
           borderRadius: "3px",
           padding: "0 2px",
         }}
@@ -75,12 +77,12 @@ export function HighlightText({ text, query }) {
   );
 }
 
-// Reusable input className builder
+// Reusable input className builder — light theme
 export const inputCls = (hasError = false) =>
-  `w-full bg-slate-800/60 border ${
-    hasError ? "border-red-500/60" : "border-slate-700/50"
-  } rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 ${
+  `w-full bg-white border ${
+    hasError ? "border-red-400" : "border-slate-300"
+  } rounded-lg px-3 py-2 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 ${
     hasError
-      ? "focus:ring-red-500/30"
-      : "focus:ring-indigo-500/30 focus:border-indigo-500/50"
-  } transition-all`;
+      ? "focus:ring-red-300 focus:border-red-400"
+      : "focus:ring-blue-200 focus:border-blue-400"
+  } transition-all shadow-sm`;
