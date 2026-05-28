@@ -1,13 +1,13 @@
-// ─── admin/components/ui.jsx ──────────────────────────────────────────────────
+// ─── admin/components/ui.jsx  (LIGHT THEME) ──────────────────────────────────
 
 const DATA_STATUS_COLORS = {
-  "Complete": { bg: "#d1fae5", text: "#065f46", dot: "#10b981", border: "#6ee7b7" },
-  "Partial":  { bg: "#fef3c7", text: "#92400e", dot: "#f59e0b", border: "#fcd34d" },
-  "Basic":    { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", border: "#93c5fd" },
+  "Complete": { bg: "#dcfce7", text: "#14532d", dot: "#16a34a", border: "#86efac" },
+  "Partial":  { bg: "#fef9c3", text: "#713f12", dot: "#ca8a04", border: "#fde047" },
+  "Basic":    { bg: "#dbeafe", text: "#1e3a8a", dot: "#2563eb", border: "#93c5fd" },
 };
 
 const STATUS_COLORS = {
-  "Active":     { bg: "#d1fae5", text: "#065f46", dot: "#10b981", border: "#6ee7b7" },
+  "Active":     { bg: "#dcfce7", text: "#14532d", dot: "#16a34a", border: "#86efac" },
   "Inactive":   { bg: "#f1f5f9", text: "#475569", dot: "#94a3b8", border: "#cbd5e1" },
   "Not Active": { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", border: "#fca5a5" },
 };
@@ -77,12 +77,12 @@ export function HighlightText({ text, query }) {
   );
 }
 
-// Reusable input className builder — light theme
+// Light-theme input class builder
 export const inputCls = (hasError = false) =>
   `w-full bg-white border ${
-    hasError ? "border-red-400" : "border-slate-300"
+    hasError ? "border-red-400 ring-1 ring-red-200" : "border-slate-300"
   } rounded-lg px-3 py-2 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 ${
     hasError
-      ? "focus:ring-red-300 focus:border-red-400"
-      : "focus:ring-blue-200 focus:border-blue-400"
+      ? "focus:ring-red-200 focus:border-red-400"
+      : "focus:ring-blue-100 focus:border-blue-400"
   } transition-all shadow-sm`;

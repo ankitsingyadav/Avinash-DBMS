@@ -4,6 +4,30 @@ import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
 import Navbar from "../components/Navbar";
 
+// ── sessionStorage helpers for cancelled orgs ─────────────────────────────────
+const SS_KEY = "np_cancelled_orgs";
+
+const loadCancelledOrgs = () => {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(SS_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+};
+
+const saveCancelledOrgs = (set) => {
+  try {
+    sessionStorage.setItem(SS_KEY, JSON.stringify([...set]));
+  } catch {}
+};
+
+const addCancelledOrg = (orgId) => {
+  const current = loadCancelledOrgs();
+  current.add(orgId);
+  saveCancelledOrgs(current);
+  return current;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const getTimeRemaining = (date) => {
   const now    = Date.now();
@@ -293,6 +317,40 @@ function TimeProgress({ pct, color, overdue }) {
   );
 }
 
+// ── Helper: Get latest interaction per organisation ───────────────────────────
+const getLatestPerOrg = (list) => {
+  if (!list || list.length === 0) return [];
+
+  const orgMap = {};
+
+  list.forEach((item) => {
+    const orgId = item._id;
+    if (!orgMap[orgId]) {
+      orgMap[orgId] = item;
+      return;
+    }
+
+    const existing = orgMap[orgId];
+
+    const existingTime = new Date(
+      existing.createdAt || existing.savedAt || existing.nextInteractionDate
+    ).getTime();
+    const itemTime = new Date(
+      item.createdAt || item.savedAt || item.nextInteractionDate
+    ).getTime();
+
+    if (!existing.createdAt && !existing.savedAt && !item.createdAt && !item.savedAt) {
+      if ((item.interactionIndex ?? 0) > (existing.interactionIndex ?? 0)) {
+        orgMap[orgId] = item;
+      }
+    } else if (itemTime > existingTime) {
+      orgMap[orgId] = item;
+    }
+  });
+
+  return Object.values(orgMap);
+};
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Notificationspage() {
 
@@ -303,6 +361,7 @@ export default function Notificationspage() {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling,   setCancelling]   = useState(false);
   const [tick,         setTick]         = useState(0);
+  const lastFetchRef = useRef(0);
 
   // Filters
   const [filterMode,    setFilterMode]    = useState("");
@@ -312,24 +371,56 @@ export default function Notificationspage() {
 
   const tickRef = useRef(null);
 
-  // ── Fetch ───────────────────────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  // ── Fetch — sessionStorage se cancelled orgs padhkar filter karo ────────────
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res  = await axios.get("/organisations/upcoming-interactions");
       const list = res.data?.interactions || [];
-      setInteractions(list);
+
+      // Har fetch pe sessionStorage se fresh padho — page refresh ke baad bhi kaam karega
+      const cancelled = loadCancelledOrgs();
+      const filtered  = cancelled.size > 0
+        ? list.filter((i) => !cancelled.has(String(i._id)))
+        : list;
+
+      setInteractions(filtered);
+      lastFetchRef.current = Date.now();
     } catch {
       setInteractions([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchData();
-    const ref = setInterval(fetchData, 3 * 60 * 1000);
+    const ref = setInterval(() => fetchData(true), 3 * 60 * 1000);
     return () => clearInterval(ref);
+  }, [fetchData]);
+
+  // Refetch when tab becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const timeSinceFetch = Date.now() - lastFetchRef.current;
+        if (timeSinceFetch > 5000) {
+          fetchData(true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [fetchData]);
+
+  // Listen for custom event from AdminPage
+  useEffect(() => {
+    const handleInteractionSaved = () => {
+      fetchData(true);
+    };
+    window.addEventListener("interaction-saved", handleInteractionSaved);
+    return () => window.removeEventListener("interaction-saved", handleInteractionSaved);
   }, [fetchData]);
 
   // Countdown re-render every 30s
@@ -342,16 +433,27 @@ export default function Notificationspage() {
   const handleCancelConfirm = async () => {
     if (!cancelTarget) return;
     setCancelling(true);
+
+    const removedId    = String(cancelTarget._id);
+    const removedIndex = cancelTarget.interactionIndex;
+
+    // 1. sessionStorage mein org ID save karo — refresh ke baad bhi persist rahega
+    addCancelledOrg(removedId);
+
+    // 2. State se poori org hata do — koi bhi purana interaction wapas na aaye
+    setInteractions((prev) => prev.filter((i) => String(i._id) !== removedId));
+
+    // 3. Modal band karo immediately
+    setCancelTarget(null);
+    setCancelling(false);
+
+    // 4. API call (optimistic update ho chuka hai)
     try {
-      await axios.post(`/organisations/${cancelTarget._id}/interactions/cancel`, {
-        interactionIndex: cancelTarget.interactionIndex,
+      await axios.post(`/organisations/${removedId}/interactions/cancel`, {
+        interactionIndex: removedIndex,
       });
-      await fetchData();
     } catch {
-      // silent
-    } finally {
-      setCancelling(false);
-      setCancelTarget(null);
+      // Silent — fetchData bhi sessionStorage se filter karega
     }
   };
 
@@ -361,7 +463,7 @@ export default function Notificationspage() {
     navigate(`/admin?tab=organisation&highlight=${item._id}&filter=upcoming`);
   };
 
-  // ── Filter logic ─────────────────────────────────────────────────────────────
+  // ── Filter logic ──────────────────────────────────────────────────────────
   const filtered = interactions.filter((item) => {
     const tr = getTimeRemaining(item.nextInteractionDate);
     if (filterUrgency === "overdue"   && !tr.overdue)                  return false;
@@ -382,11 +484,15 @@ export default function Notificationspage() {
     return true;
   });
 
-  // Stats
-  const total    = interactions.length;
-  const overdue  = interactions.filter((i) => getTimeRemaining(i.nextInteractionDate).overdue).length;
-  const critical = interactions.filter((i) => { const t = getTimeRemaining(i.nextInteractionDate); return t.critical && !t.overdue; }).length;
-  const urgent   = interactions.filter((i) => { const t = getTimeRemaining(i.nextInteractionDate); return t.urgent && !t.overdue && !t.critical; }).length;
+  // ── Per-org latest: har organisation ka sirf ek latest interaction ─────────
+  const displayList = getLatestPerOrg(filtered);
+
+  // Stats — per-org deduplicated list se
+  const allOrgs  = getLatestPerOrg(interactions);
+  const total    = allOrgs.length;
+  const overdue  = allOrgs.filter((i) => getTimeRemaining(i.nextInteractionDate).overdue).length;
+  const critical = allOrgs.filter((i) => { const t = getTimeRemaining(i.nextInteractionDate); return t.critical && !t.overdue; }).length;
+  const urgent   = allOrgs.filter((i) => { const t = getTimeRemaining(i.nextInteractionDate); return t.urgent && !t.overdue && !t.critical; }).length;
   const safe     = total - overdue - critical - urgent;
 
   const modes     = [...new Set(interactions.map((i) => i.interactionMode).filter(Boolean))];
@@ -442,12 +548,12 @@ export default function Notificationspage() {
                 Upcoming Interactions
               </h1>
               <p style={{ color: "#7ba8cc", fontSize: 12.5, margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>
-                Next 48 hours · Auto-refreshes every 3 min
+                Latest per organisation · Auto-refreshes every 3 min
               </p>
             </div>
 
             <button
-              onClick={fetchData}
+              onClick={() => fetchData()}
               style={{
                 display: "flex", alignItems: "center", gap: 7,
                 background: "#e8f2ff", border: "1px solid #b0d0f0",
@@ -609,7 +715,7 @@ export default function Notificationspage() {
             fontFamily: "'JetBrains Mono', monospace",
             marginLeft: hasFilters ? 0 : "auto",
           }}>
-            {loading ? "…" : `${filtered.length} result${filtered.length !== 1 ? "s" : ""}`}
+            {loading ? "…" : `${displayList.length} organisation${displayList.length !== 1 ? "s" : ""}`}
           </span>
         </div>
 
@@ -617,11 +723,13 @@ export default function Notificationspage() {
 
         {loading && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[1,2,3,4,5].map((i) => <SkeletonCard key={i} />)}
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
         )}
 
-        {!loading && filtered.length === 0 && (
+        {!loading && displayList.length === 0 && (
           <div style={{
             textAlign: "center", padding: "80px 24px",
             background: "#ffffff", border: "1px solid #cce0f5",
@@ -653,10 +761,10 @@ export default function Notificationspage() {
           </div>
         )}
 
-        {/* Interaction Cards */}
-        {!loading && filtered.length > 0 && (
+        {/* Interaction Cards — one per organisation */}
+        {!loading && displayList.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {filtered.map((item, idx) => {
+            {displayList.map((item, idx) => {
               const tr   = getTimeRemaining(item.nextInteractionDate);
               const mode = MODE_META[item.interactionMode] || { icon: "📋", color: "#4f46e5", bg: "rgba(79,70,229,0.08)" };
               const tCol = TYPE_COLORS[item.centreType] || "#4f46e5";
@@ -693,7 +801,7 @@ export default function Notificationspage() {
                     border: `1px solid ${cardBorderColor}`,
                     borderLeft: `3px solid ${bCol}`,
                     borderRadius: 20, padding: "18px 20px 16px",
-                    animationDelay: `${Math.min(idx * 35, 280)}ms`,
+                    animationDelay: `${idx * 40}ms`,
                     position: "relative", overflow: "hidden",
                     cursor: "pointer",
                   }}
@@ -750,7 +858,6 @@ export default function Notificationspage() {
 
                       {/* Time + Date row */}
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        {/* Urgency badge */}
                         <span style={{
                           fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 8,
                           background: tr.overdue
@@ -840,7 +947,7 @@ export default function Notificationspage() {
             textAlign: "center", color: "#a0c0d8", fontSize: 11, marginTop: 28,
             fontFamily: "'JetBrains Mono', monospace",
           }}>
-            Showing interactions scheduled within the next 48 hours · {total} total
+            {displayList.length} organisation{displayList.length !== 1 ? "s" : ""} · {total} total interactions in next 48h
           </p>
         )}
       </div>

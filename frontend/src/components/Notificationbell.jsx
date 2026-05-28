@@ -2,6 +2,26 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios.js";
 
+// ── sessionStorage helpers — Notificationspage ke saath shared ────────────────
+const SS_KEY = "np_cancelled_orgs";
+
+const loadCancelledOrgs = () => {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(SS_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+};
+
+const addCancelledOrg = (orgId) => {
+  const current = loadCancelledOrgs();
+  current.add(String(orgId));
+  try {
+    sessionStorage.setItem(SS_KEY, JSON.stringify([...current]));
+  } catch {}
+  return current;
+};
+
 const getTimeRemaining = (date) => {
   const now    = Date.now();
   const target = new Date(date).getTime();
@@ -92,30 +112,64 @@ function CancelConfirmModal({ notification, onConfirm, onCancel, loading }) {
   );
 }
 
+// ── Helper: Get latest interaction per organisation ───────────────────────────
+const getLatestPerOrg = (list) => {
+  if (!list || list.length === 0) return [];
+
+  const orgMap = {};
+
+  list.forEach((item) => {
+    const orgId = item._id;
+    if (!orgMap[orgId]) {
+      orgMap[orgId] = item;
+      return;
+    }
+
+    const existing = orgMap[orgId];
+    const existingTime = new Date(
+      existing.createdAt || existing.savedAt || existing.nextInteractionDate
+    ).getTime();
+    const itemTime = new Date(
+      item.createdAt || item.savedAt || item.nextInteractionDate
+    ).getTime();
+
+    if (!existing.createdAt && !existing.savedAt && !item.createdAt && !item.savedAt) {
+      if ((item.interactionIndex ?? 0) > (existing.interactionIndex ?? 0)) {
+        orgMap[orgId] = item;
+      }
+    } else if (itemTime > existingTime) {
+      orgMap[orgId] = item;
+    }
+  });
+
+  return Object.values(orgMap);
+};
+
 // ── Main NotificationBell ─────────────────────────────────────────────────────
 export default function NotificationBell({ canViewNotifications }) {
   const navigate = useNavigate();
-  const [open, setOpen]                 = useState(false);
   const [notifications, setNoti]        = useState([]);
-  const [loading, setLoading]           = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling]     = useState(false);
-  const [dismissed, setDismissed]       = useState(() => {
-    try { return new Set(JSON.parse(sessionStorage.getItem("nb_dismissed") || "[]")); }
-    catch { return new Set(); }
-  });
-  const [tick, setTick] = useState(0);
-  const dropRef    = useRef(null);
+  const [tick, setTick]                 = useState(0);
+  const dropRef     = useRef(null);
   const intervalRef = useRef(null);
-  const fetchRef   = useRef(null);
+  const fetchRef    = useRef(null);
 
-  // ── Fetch ───────────────────────────────────────────────────────────────────
+  // ── Fetch — sessionStorage se cancelled orgs padhkar filter karo ─────────
   const fetchNotifications = useCallback(async () => {
     if (!canViewNotifications) return;
     try {
       const res  = await axios.get("/organisations/upcoming-interactions");
-const list = res.data?.interactions || [];
-      setNoti(list);
+      const list = res.data?.interactions || [];
+
+      // Har fetch pe sessionStorage se fresh padho — page refresh ke baad bhi kaam karega
+      const cancelled = loadCancelledOrgs();
+      const filtered  = cancelled.size > 0
+        ? list.filter((i) => !cancelled.has(String(i._id)))
+        : list;
+
+      setNoti(filtered);
     } catch {
       // Silent fail
     }
@@ -135,7 +189,7 @@ const list = res.data?.interactions || [];
 
   useEffect(() => {
     const fn = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false);
+      if (dropRef.current && !dropRef.current.contains(e.target)) return;
     };
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
@@ -143,77 +197,53 @@ const list = res.data?.interactions || [];
 
   if (!canViewNotifications) return null;
 
-  const visible     = notifications.filter((n) => !dismissed.has(n._id + "_" + n.interactionIndex));
-  const urgentCount = visible.filter((n) => {
+  const latestPerOrg = getLatestPerOrg(notifications);
+
+  const totalCount  = latestPerOrg.length;
+  const urgentCount = latestPerOrg.filter((n) => {
     const tr = getTimeRemaining(n.nextInteractionDate);
     return tr.urgent || tr.overdue;
   }).length;
-  const totalCount = visible.length;
-
-  const dismiss = (n, e) => {
-    e.stopPropagation();
-    const key  = n._id + "_" + n.interactionIndex;
-    const next = new Set(dismissed);
-    next.add(key);
-    setDismissed(next);
-    try { sessionStorage.setItem("nb_dismissed", JSON.stringify([...next])); } catch {}
-  };
 
   const handleCancelConfirm = async () => {
     if (!cancelTarget) return;
     setCancelling(true);
+
+    const removedId    = String(cancelTarget._id);
+    const removedIndex = cancelTarget.interactionIndex;
+
+    // sessionStorage mein save karo — refresh pe bhi persist rahega
+    addCancelledOrg(removedId);
+
+    // State se poori org hata do
+    setNoti((prev) => prev.filter((i) => String(i._id) !== removedId));
+
+    setCancelTarget(null);
+    setCancelling(false);
+
     try {
-      await axios.post(`/organisations/${cancelTarget._id}/interactions/cancel`, {
-        interactionIndex: cancelTarget.interactionIndex,
+      await axios.post(`/organisations/${removedId}/interactions/cancel`, {
+        interactionIndex: removedIndex,
       });
-      await fetchNotifications();
-      const key  = cancelTarget._id + "_" + cancelTarget.interactionIndex;
-      const next = new Set(dismissed);
-      next.add(key);
-      setDismissed(next);
-      try { sessionStorage.setItem("nb_dismissed", JSON.stringify([...next])); } catch {}
     } catch {
-      const key  = cancelTarget._id + "_" + cancelTarget.interactionIndex;
-      const next = new Set(dismissed);
-      next.add(key);
-      setDismissed(next);
-    } finally {
-      setCancelling(false);
-      setCancelTarget(null);
+      // Silent
     }
   };
 
-  // ── CHANGED: Bell click → go to /notifications page ─────────────────────
   const handleBellClick = () => {
     navigate("/notifications");
-  };
-
-  // ── CHANGED: "View all" → /notifications ────────────────────────────────
-  const handleViewAll = () => {
-    setOpen(false);
-    navigate("/notifications");
-  };
-
-  const handleNotifClick = (n) => {
-    setOpen(false);
-    navigate(`/notifications`);
   };
 
   return (
     <>
       <style>{`
         @keyframes nb-scaleIn { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes nb-slideDown { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes nb-pulse-ring { 0%,100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.5); opacity: 0; } }
-        .nb-scroll::-webkit-scrollbar { width: 3px; }
-        .nb-scroll::-webkit-scrollbar-track { background: transparent; }
-        .nb-scroll::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.25); border-radius: 99px; }
         .nb-item { transition: background 0.12s; }
         .nb-item:hover { background: rgba(255,255,255,0.025) !important; }
       `}</style>
 
       <div className="relative" ref={dropRef}>
-        {/* ── Bell Button — click navigates to /notifications ── */}
         <button
           onClick={handleBellClick}
           className="relative flex items-center justify-center w-9 h-9 rounded-xl transition-all"
@@ -227,7 +257,6 @@ const list = res.data?.interactions || [];
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
           </svg>
 
-          {/* Badge */}
           {totalCount > 0 && (
             <span
               className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold text-white px-1"
@@ -235,7 +264,9 @@ const list = res.data?.interactions || [];
                 background: urgentCount > 0
                   ? "linear-gradient(135deg,#ef4444,#dc2626)"
                   : "linear-gradient(135deg,#6366f1,#8b5cf6)",
-                boxShadow: urgentCount > 0 ? "0 0 0 2px #080810, 0 0 8px rgba(239,68,68,0.5)" : "0 0 0 2px #080810",
+                boxShadow: urgentCount > 0
+                  ? "0 0 0 2px #080810, 0 0 8px rgba(239,68,68,0.5)"
+                  : "0 0 0 2px #080810",
               }}
             >
               {totalCount > 99 ? "99+" : totalCount}
