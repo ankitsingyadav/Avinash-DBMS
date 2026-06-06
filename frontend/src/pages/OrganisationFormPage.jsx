@@ -1,5 +1,13 @@
 // OrganisationFormPage.jsx — Light Theme (White / Light Blue / Black)
-import React, { useState, useCallback } from "react";
+// CHANGES:
+//   1. handleConfirm: 409 duplicate errors shown with a dedicated toast style
+//      that includes the server's descriptive message
+//   2. LocationSelector wrapper: overrides any grey/disabled styling so all
+//      fields render on white with full contrast — done via a scoped CSS block
+//      injected once at mount (no external deps, no className hacks on child)
+//   3. lightInput helper unchanged — still used for all non-LocationSelector fields
+
+import React, { useState, useCallback, useEffect } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,7 +15,6 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "../utils/axios";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { inputCls } from "../admin/components/ui";
 import LocationSelector from "../components/LocationSelector";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -175,14 +182,15 @@ const lightInput = (hasError) =>
       : "border-slate-300 focus:ring-blue-200 focus:border-blue-400"
   } rounded-xl px-3.5 py-2.5 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 transition-all shadow-sm`;
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Section color map ────────────────────────────────────────────────────────
 const SECTION_COLORS = {
-  blue:   { bar: "bg-blue-500",   badge: "bg-blue-50 border-blue-200 text-blue-700",   title: "text-blue-600" },
-  green:  { bar: "bg-emerald-500",badge: "bg-emerald-50 border-emerald-200 text-emerald-700", title: "text-emerald-600" },
-  violet: { bar: "bg-violet-500", badge: "bg-violet-50 border-violet-200 text-violet-700", title: "text-violet-600" },
-  amber:  { bar: "bg-amber-500",  badge: "bg-amber-50 border-amber-200 text-amber-700", title: "text-amber-600" },
+  blue:   { bar: "bg-blue-500",    title: "text-blue-600"    },
+  green:  { bar: "bg-emerald-500", title: "text-emerald-600" },
+  violet: { bar: "bg-violet-500",  title: "text-violet-600"  },
+  amber:  { bar: "bg-amber-500",   title: "text-amber-600"   },
 };
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
 function SectionHeader({ color, title }) {
   const c = SECTION_COLORS[color];
   return (
@@ -196,7 +204,9 @@ function SectionHeader({ color, title }) {
 function FormField({ label, error, children, colSpan2 }) {
   return (
     <div className={`space-y-1.5 ${colSpan2 ? "md:col-span-2" : ""}`}>
-      <label className="text-xs font-semibold text-slate-500 ml-1 uppercase tracking-wide">{label}</label>
+      <label className="text-xs font-semibold text-slate-500 ml-1 uppercase tracking-wide">
+        {label}
+      </label>
       {children}
       {error && (
         <p className="text-[11px] text-red-500 ml-1 flex items-center gap-1">
@@ -210,12 +220,92 @@ function FormField({ label, error, children, colSpan2 }) {
   );
 }
 
+// ─── Duplicate alert banner (shown inline below form header on 409) ───────────
+function DuplicateBanner({ message, onDismiss }) {
+  if (!message) return null;
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-800 shadow-sm"
+    >
+      {/* Icon */}
+      <span className="mt-0.5 shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-red-100">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+      </span>
+      <div className="flex-1 leading-relaxed">
+        <span className="font-semibold">Duplicate Record Detected — </span>
+        {message}
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss duplicate warning"
+        className="shrink-0 text-red-400 hover:text-red-600 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+// ─── CSS injection: force LocationSelector inputs to white ───────────────────
+// LocationSelector renders its own inputs internally. We inject a scoped
+// <style> tag that targets the wrapper ID and overrides any grey/disabled-
+// looking background without touching the component's own JSX.
+const LOCATION_STYLE_ID = "org-form-location-overrides";
+
+function injectLocationStyles() {
+  if (document.getElementById(LOCATION_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = LOCATION_STYLE_ID;
+  style.textContent = `
+    /* Force all inputs/selects inside the LocationSelector wrapper to white */
+    #org-location-wrapper input,
+    #org-location-wrapper select,
+    #org-location-wrapper textarea {
+      background-color: #ffffff !important;
+      color: #1e293b !important;          /* slate-800 */
+      opacity: 1 !important;
+      -webkit-text-fill-color: #1e293b !important;
+    }
+    /* Remove the greyed-out disabled look even when field is not yet editable */
+    #org-location-wrapper input:disabled,
+    #org-location-wrapper select:disabled {
+      background-color: #f8fafc !important; /* slate-50, very subtle tint */
+      color: #64748b !important;            /* slate-500 */
+      -webkit-text-fill-color: #64748b !important;
+      cursor: default;
+    }
+    /* Placeholder contrast */
+    #org-location-wrapper input::placeholder,
+    #org-location-wrapper select::placeholder {
+      color: #94a3b8 !important; /* slate-400 */
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // ─── Main Page Component ──────────────────────────────────────────────────────
 const OrganisationFormPage = () => {
   const navigate = useNavigate();
-  const [loading,     setLoading]     = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [formData,    setFormData]    = useState(null);
+  const [loading,           setLoading]           = useState(false);
+  const [showConfirm,       setShowConfirm]       = useState(false);
+  const [formData,          setFormData]          = useState(null);
+  // Stores the 409 duplicate message for the inline banner
+  const [duplicateMsg,      setDuplicateMsg]      = useState("");
+
+  // Inject location field overrides once on mount
+  useEffect(() => {
+    injectLocationStyles();
+    return () => {
+      // Clean up on unmount to avoid leaking styles if component is hot-reloaded
+      document.getElementById(LOCATION_STYLE_ID)?.remove();
+    };
+  }, []);
 
   const {
     register,
@@ -227,17 +317,17 @@ const OrganisationFormPage = () => {
     watch,
     formState: { errors, isSubmitting },
   } = useForm({
-    resolver:      zodResolver(organisationSchema),
-    defaultValues: DEFAULT_VALUES,
-    mode:          "onBlur",
+    resolver:       zodResolver(organisationSchema),
+    defaultValues:  DEFAULT_VALUES,
+    mode:           "onBlur",
     reValidateMode: "onChange",
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "contacts" });
   const contactCount = fields.length;
 
-  const selectedCentreType = watch("centreType");
-  const designationOptions = DESIGNATION_MAP[selectedCentreType] ?? [];
+  const selectedCentreType  = watch("centreType");
+  const designationOptions  = DESIGNATION_MAP[selectedCentreType] ?? [];
 
   const handleCentreTypeChange = useCallback(
     (value) => {
@@ -250,6 +340,8 @@ const OrganisationFormPage = () => {
   );
 
   const onSubmit = useCallback((data) => {
+    // Clear any previous duplicate banner when user re-submits
+    setDuplicateMsg("");
     setFormData(data);
     setShowConfirm(true);
   }, []);
@@ -261,11 +353,22 @@ const OrganisationFormPage = () => {
       toast.success("Organisation registered successfully!");
       navigate("/organisation");
     } catch (err) {
+      const status  = err?.response?.status;
       const message =
         err?.response?.data?.message ||
         err?.message ||
         "Failed to register organisation. Please try again.";
-      toast.error(message);
+
+      if (status === 409) {
+        // Duplicate: show inline banner + a toast for immediate visibility
+        setDuplicateMsg(message);
+        toast.error("Duplicate record — organisation already exists.", {
+          duration: 5000,
+          icon: "⚠️",
+        });
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
       setShowConfirm(false);
@@ -290,11 +393,23 @@ const OrganisationFormPage = () => {
 
       <div className="max-w-4xl mx-auto px-5 py-10">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs text-slate-400 mb-8" aria-label="Breadcrumb">
-          <Link to="/organisation" className="hover:text-blue-600 transition-colors font-medium">
+        <nav
+          className="flex items-center gap-2 text-xs text-slate-400 mb-8"
+          aria-label="Breadcrumb"
+        >
+          <Link
+            to="/organisation"
+            className="hover:text-blue-600 transition-colors font-medium"
+          >
             Organisation
           </Link>
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12" height="12"
+            fill="none" viewBox="0 0 24 24"
+            stroke="currentColor" strokeWidth={2}
+            aria-hidden="true"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
           <span className="text-blue-600 font-semibold" aria-current="page">
@@ -303,17 +418,39 @@ const OrganisationFormPage = () => {
         </nav>
 
         {/* Page Header */}
-        <div className="flex items-start gap-4 mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-200" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={1.5}>
+        <div className="flex items-start gap-4 mb-6">
+          <div
+            className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-200"
+            aria-hidden="true"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="22" height="22"
+              fill="none" viewBox="0 0 24 24"
+              stroke="white" strokeWidth={1.5}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-1">Add New Organisation</h1>
-            <p className="text-sm text-slate-500">Register a new centre or organisation to the database.</p>
+            <h1 className="text-2xl font-bold text-slate-900 mb-1">
+              Add New Organisation
+            </h1>
+            <p className="text-sm text-slate-500">
+              Register a new centre or organisation to the database.
+            </p>
           </div>
         </div>
+
+        {/* ── Duplicate inline banner ──────────────────────────────────────── */}
+        {duplicateMsg && (
+          <div className="mb-6">
+            <DuplicateBanner
+              message={duplicateMsg}
+              onDismiss={() => setDuplicateMsg("")}
+            />
+          </div>
+        )}
 
         <form
           onSubmit={handleSubmit(onSubmit)}
@@ -327,7 +464,10 @@ const OrganisationFormPage = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Institution Type */}
-              <FormField label="Institution Type *" error={errors.centreType?.message}>
+              <FormField
+                label="Institution Type *"
+                error={errors.centreType?.message}
+              >
                 <Controller
                   name="centreType"
                   control={control}
@@ -352,7 +492,10 @@ const OrganisationFormPage = () => {
               </FormField>
 
               {/* Institution Name */}
-              <FormField label="Institution Name *" error={errors.centreName?.message}>
+              <FormField
+                label="Institution Name *"
+                error={errors.centreName?.message}
+              >
                 <input
                   {...register("centreName")}
                   placeholder="e.g. St. Xavier's School"
@@ -363,7 +506,11 @@ const OrganisationFormPage = () => {
               </FormField>
 
               {/* Website */}
-              <FormField label="Website (Optional)" error={errors.website?.message} colSpan2>
+              <FormField
+                label="Website (Optional)"
+                error={errors.website?.message}
+                colSpan2
+              >
                 <input
                   {...register("website")}
                   type="url"
@@ -374,8 +521,11 @@ const OrganisationFormPage = () => {
               </FormField>
             </div>
 
-            {/* Location */}
-            <div className="mt-6 pt-6 border-t border-slate-100">
+            {/* ── Location ── white inputs enforced via #org-location-wrapper */}
+            <div
+              id="org-location-wrapper"
+              className="mt-6 pt-6 border-t border-slate-100"
+            >
               <LocationSelector
                 mode="rhf"
                 showPincode={true}
@@ -389,7 +539,10 @@ const OrganisationFormPage = () => {
 
             {/* Street Address */}
             <div className="mt-6 pt-6 border-t border-slate-100">
-              <FormField label="Street Details *" error={errors.address?.message}>
+              <FormField
+                label="Street Details *"
+                error={errors.address?.message}
+              >
                 <textarea
                   {...register("address")}
                   rows={2}
@@ -407,7 +560,13 @@ const OrganisationFormPage = () => {
             <SectionHeader color="green" title="Contact Person Details" />
             <p className="text-[11px] text-slate-400 mb-6 -mt-4">
               You can add up to 4 contact persons.{" "}
-              <span className={contactCount >= 4 ? "text-amber-500 font-semibold" : "text-slate-400"}>
+              <span
+                className={
+                  contactCount >= 4
+                    ? "text-amber-500 font-semibold"
+                    : "text-slate-400"
+                }
+              >
                 {contactCount}/4 added
               </span>
             </p>
@@ -430,7 +589,12 @@ const OrganisationFormPage = () => {
                         className="text-red-400 hover:text-red-600 text-xs flex items-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
                         aria-label={`Remove contact person ${index + 1}`}
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="14" height="14"
+                          fill="none" viewBox="0 0 24 24"
+                          stroke="currentColor" strokeWidth={2}
+                        >
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
                         </svg>
                         Remove
@@ -439,7 +603,10 @@ const OrganisationFormPage = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField label="Full Name *" error={errors.contacts?.[index]?.name?.message}>
+                    <FormField
+                      label="Full Name *"
+                      error={errors.contacts?.[index]?.name?.message}
+                    >
                       <input
                         {...register(`contacts.${index}.name`)}
                         placeholder="Enter name"
@@ -448,7 +615,10 @@ const OrganisationFormPage = () => {
                       />
                     </FormField>
 
-                    <FormField label="Designation *" error={errors.contacts?.[index]?.designation?.message}>
+                    <FormField
+                      label="Designation *"
+                      error={errors.contacts?.[index]?.designation?.message}
+                    >
                       {designationOptions.length > 0 ? (
                         <select
                           {...register(`contacts.${index}.designation`)}
@@ -465,7 +635,10 @@ const OrganisationFormPage = () => {
                           <input
                             disabled
                             placeholder="Select Institution Type first"
-                            className={lightInput(!!errors.contacts?.[index]?.designation) + " opacity-50 cursor-not-allowed bg-slate-100"}
+                            className={
+                              lightInput(!!errors.contacts?.[index]?.designation) +
+                              " opacity-50 cursor-not-allowed bg-slate-100"
+                            }
                             aria-disabled="true"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-amber-500 font-semibold pointer-events-none">
@@ -475,7 +648,10 @@ const OrganisationFormPage = () => {
                       )}
                     </FormField>
 
-                    <FormField label="Contact Number *" error={errors.contacts?.[index]?.contactNumber?.message}>
+                    <FormField
+                      label="Contact Number *"
+                      error={errors.contacts?.[index]?.contactNumber?.message}
+                    >
                       <input
                         {...register(`contacts.${index}.contactNumber`)}
                         type="tel"
@@ -485,7 +661,10 @@ const OrganisationFormPage = () => {
                       />
                     </FormField>
 
-                    <FormField label="Email Address *" error={errors.contacts?.[index]?.email?.message}>
+                    <FormField
+                      label="Email Address *"
+                      error={errors.contacts?.[index]?.email?.message}
+                    >
                       <input
                         {...register(`contacts.${index}.email`)}
                         type="email"
@@ -501,16 +680,26 @@ const OrganisationFormPage = () => {
               {contactCount < 4 ? (
                 <button
                   type="button"
-                  onClick={() => append({ name: "", designation: "", contactNumber: "", email: "" })}
+                  onClick={() =>
+                    append({ name: "", designation: "", contactNumber: "", email: "" })
+                  }
                   className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50 transition-all text-sm font-medium flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18" height="18"
+                    fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor" strokeWidth={2}
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
                   Add another contact person
                 </button>
               ) : (
-                <div role="status" className="w-full py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 text-sm text-center font-medium">
+                <div
+                  role="status"
+                  className="w-full py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 text-sm text-center font-medium"
+                >
                   Maximum of 4 contact persons reached
                 </div>
               )}
@@ -525,7 +714,10 @@ const OrganisationFormPage = () => {
               Current Interaction
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField label="Interaction By *" error={errors.interaction?.interactionBy?.message}>
+              <FormField
+                label="Interaction By *"
+                error={errors.interaction?.interactionBy?.message}
+              >
                 <input
                   {...register("interaction.interactionBy")}
                   placeholder="Name of person who interacted"
@@ -534,7 +726,10 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              <FormField label="Interacted With *" error={errors.interaction?.interactedWith?.message}>
+              <FormField
+                label="Interacted With *"
+                error={errors.interaction?.interactedWith?.message}
+              >
                 <input
                   {...register("interaction.interactedWith")}
                   placeholder="Name of contact person at org"
@@ -543,7 +738,10 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              <FormField label="Interaction Date *" error={errors.interaction?.interactionDate?.message}>
+              <FormField
+                label="Interaction Date *"
+                error={errors.interaction?.interactionDate?.message}
+              >
                 <input
                   type="date"
                   {...register("interaction.interactionDate")}
@@ -553,7 +751,10 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              <FormField label="AIN / NIN Number" error={errors.interaction?.ninAin?.message}>
+              <FormField
+                label="AIN / NIN Number"
+                error={errors.interaction?.ninAin?.message}
+              >
                 <input
                   {...register("interaction.ninAin")}
                   placeholder="Enter AIN or NIN number"
@@ -561,7 +762,11 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              <FormField label="Notes" error={errors.interaction?.notes?.message} colSpan2>
+              <FormField
+                label="Notes"
+                error={errors.interaction?.notes?.message}
+                colSpan2
+              >
                 <textarea
                   {...register("interaction.notes")}
                   rows={3}
@@ -582,7 +787,10 @@ const OrganisationFormPage = () => {
               Next Interaction Planned
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField label="Planned Date" error={errors.interaction?.nextInteractionDate?.message}>
+              <FormField
+                label="Planned Date"
+                error={errors.interaction?.nextInteractionDate?.message}
+              >
                 <input
                   type="date"
                   {...register("interaction.nextInteractionDate")}
@@ -591,7 +799,10 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              <FormField label="Interaction Mode *" error={errors.interaction?.interactionMode?.message}>
+              <FormField
+                label="Interaction Mode *"
+                error={errors.interaction?.interactionMode?.message}
+              >
                 <select
                   {...register("interaction.interactionMode")}
                   className={lightInput(!!errors.interaction?.interactionMode)}
@@ -611,7 +822,10 @@ const OrganisationFormPage = () => {
             <SectionHeader color="amber" title="Additional Details" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField label="Centre Onboarded By *" error={errors.onboardedBy?.message}>
+              <FormField
+                label="Centre Onboarded By *"
+                error={errors.onboardedBy?.message}
+              >
                 <input
                   {...register("onboardedBy")}
                   placeholder="Enter name"
@@ -620,7 +834,10 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              <FormField label="AIN / NIN Number" error={errors.ninAin?.message}>
+              <FormField
+                label="AIN / NIN Number"
+                error={errors.ninAin?.message}
+              >
                 <input
                   {...register("ninAin")}
                   placeholder="Enter NIN or AIN number"
@@ -636,7 +853,12 @@ const OrganisationFormPage = () => {
               to="/organisation"
               className="text-sm text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-colors font-medium"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14" height="14"
+                fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth={2}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
               Back

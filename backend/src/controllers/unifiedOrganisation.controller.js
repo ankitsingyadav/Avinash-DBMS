@@ -38,10 +38,7 @@ const normaliseEmail = (raw, fallbackSlug = "record") => {
 
 const VALID_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
 
-// ── FIX: Centralised status normaliser ───────────────────────────────────────
-// Model enum only accepts: "Basic" | "Partial" | "Complete"
-// pre('save') hook migrates legacy values but insertMany skips hooks entirely,
-// so we must normalise before every write.
+// ── Centralised status normaliser ─────────────────────────────────────────────
 const VALID_DATA_STATUSES = ["Basic", "Partial", "Complete"];
 const LEGACY_STATUS_MAP   = { Active: "Complete", Inactive: "Basic" };
 
@@ -81,6 +78,9 @@ const buildInteractionFromBody = (interaction) => ({
     : undefined,
 });
 
+// ── Helper: escape regex special characters ───────────────────────────────────
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // ── POST /api/v1/organisations ────────────────────────────────────────────────
 export const createOrganisation = asyncHandler(async (req, res) => {
   const {
@@ -110,6 +110,34 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     }
   }
 
+  // ── DUPLICATE CHECK ─────────────────────────────────────────────────────────
+  // Combination of centreType + centreName (case-insensitive) + pincode
+  // is treated as a unique fingerprint for an organisation at a location.
+  const normalisedPincode = normalisePincode(pincode);
+
+  const duplicate = await Organisation.findOne({
+    centreType,
+    centreName: {
+      $regex:   `^${escapeRegex(centreName.trim())}$`,
+      $options: "i",
+    },
+    pincode: normalisedPincode,
+  })
+    .select("_id centreName centreType city district state pincode")
+    .lean();
+
+  if (duplicate) {
+    const location = [duplicate.city, duplicate.district, duplicate.state]
+      .filter(Boolean)
+      .join(", ");
+    return sendError(
+      res,
+      409,
+      `Duplicate entry: "${duplicate.centreName}" (${duplicate.centreType}) is already registered at pincode ${duplicate.pincode}${location ? ` — ${location}` : ""}. Please verify before re-submitting.`
+    );
+  }
+  // ── END DUPLICATE CHECK ─────────────────────────────────────────────────────
+
   const finalDistrict = district && String(district).trim()
     ? String(district).trim()
     : String(city).trim();
@@ -123,7 +151,7 @@ export const createOrganisation = asyncHandler(async (req, res) => {
       city:        city.trim(),
       district:    finalDistrict,
       state:       state.trim(),
-      pincode:     normalisePincode(pincode),
+      pincode:     normalisedPincode,
       contacts: contacts.map((c, i) => {
         if (!c || typeof c !== "object") throw new Error(`Invalid contact at index ${i}`);
         return {
@@ -137,8 +165,7 @@ export const createOrganisation = asyncHandler(async (req, res) => {
       onboardedBy:  String(onboardedBy).trim(),
       ninAin:       ninAin?.trim() || undefined,
       registeredBy: req.user._id,
-      // FIX 1: was ["Active","Inactive"] — model enum only accepts Basic/Partial/Complete
-      status: normaliseDataStatus(req.body.status),
+      status:       normaliseDataStatus(req.body.status),
     });
 
     return sendSuccess(res, 201, "Organisation registered successfully.", { organisation });
@@ -254,10 +281,7 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       onboardedBy:  String(r.onboardedBy || "System Import").trim(),
       ninAin:       String(r.ninAin || "").trim() || `NIN-IMPORT-${slug.toUpperCase().slice(0, 10)}`,
       registeredBy: req.user._id,
-      // FIX 2: insertMany skips pre('save') hook entirely — must normalise here
-      // Old code: ["Active","Inactive"].includes(r.status) ? r.status : "Active"
-      // That saved invalid enum values → ValidationError or silent failure
-      status: normaliseDataStatus(r.status),
+      status:       normaliseDataStatus(r.status),
     };
   });
 
@@ -439,7 +463,6 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
 
   if (updates.pincode) updates.pincode = normalisePincode(updates.pincode);
   if (updates.website) updates.website = normaliseWebsite(updates.website);
-  // FIX 3: status update via EditModal also needs normalisation
   if (updates.status)  updates.status  = normaliseDataStatus(updates.status);
 
   const mongoUpdate = { $set: {} };
