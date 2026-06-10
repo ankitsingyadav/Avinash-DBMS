@@ -1,6 +1,6 @@
 // controllers/unifiedOrganisation.controller.js
+import Volunteer    from "../models/volunteer.model.js";
 import Organisation from "../models/organisation.model.js";
-import Volunteer from "../models/volunteer.model.js";
 import { asyncHandler, sendSuccess, sendError } from "../utils/response.utils.js";
 import {
   getHiddenFields,
@@ -8,27 +8,46 @@ import {
   verifyOwnRecord,
 } from "../middleware/permission.middleware.js";
 
-const BULK_LIMIT = 500;
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BULK_LIMIT   = 500;
+const VALID_MODES  = ["Email", "Phone", "WhatsApp", "Visit"];
 
 const SORT_WHITELIST = new Set([
   "centreName", "city", "district", "state",
   "status", "centreType", "createdAt", "updatedAt",
 ]);
 
+const VALID_DATA_STATUSES = ["Basic", "Partial", "Complete"];
+const LEGACY_STATUS_MAP   = { Active: "Complete", Inactive: "Basic" };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PURE HELPERS  (no DB calls — safe to use anywhere)
+// ─────────────────────────────────────────────────────────────────────────────
+
 const buildSort = (sortField = "createdAt", sortDir = "desc") => {
   const field = SORT_WHITELIST.has(sortField) ? sortField : "createdAt";
   return { [field]: sortDir === "asc" ? 1 : -1 };
 };
 
+/** Strip protocol-less URLs and empty values → always return a valid https URL */
 const normaliseWebsite = (v) => {
   const s = String(v || "").trim();
   if (!s) return "https://example.com";
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 };
 
+/** Remove non-digits, strip trailing ".0" from Excel floats, clamp to 6 chars */
 const normalisePincode = (v) =>
-  String(v || "").trim().replace(/\.0+$/, "").replace(/\D/g, "").slice(0, 6);
+  String(v || "")
+    .trim()
+    .replace(/\.0+$/, "")
+    .replace(/\D/g, "")
+    .slice(0, 6);
 
+/** Validate email; return a deterministic placeholder on failure */
 const normaliseEmail = (raw, fallbackSlug = "record") => {
   const e = String(raw || "").trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
@@ -36,22 +55,28 @@ const normaliseEmail = (raw, fallbackSlug = "record") => {
     : `import-${fallbackSlug.replace(/[^a-z0-9]/g, "-").slice(0, 24)}@noreply.example.com`;
 };
 
-const VALID_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
-
-// ── Centralised status normaliser ─────────────────────────────────────────────
-const VALID_DATA_STATUSES = ["Basic", "Partial", "Complete"];
-const LEGACY_STATUS_MAP   = { Active: "Complete", Inactive: "Basic" };
-
+/** Map old Active/Inactive → new tri-state; default to "Basic" */
 const normaliseDataStatus = (raw) => {
   if (!raw) return "Basic";
   if (VALID_DATA_STATUSES.includes(raw)) return raw;
   return LEGACY_STATUS_MAP[raw] ?? "Basic";
 };
 
-// ─── Helper: safely merge dataScope $or with search $or ───────────────────────
-const buildQuery = (dataScope, dateScope, searchOr, extraFilters = {}) => {
-  const query = { ...dateScope, ...extraFilters };
-  const ownerOr = dataScope?.$or ?? null;
+/** Escape special regex chars in user-supplied strings */
+const escapeRegex = (str) =>
+  String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUERY BUILDERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Safely merge a dataScope $or clause with a search $or clause.
+ * Using $and avoids illegal top-level $or + $or collision in MongoDB.
+ */
+const buildQuery = (dataScope = {}, dateScope = {}, searchOr = null, extraFilters = {}) => {
+  const query    = { ...dateScope, ...extraFilters };
+  const ownerOr  = dataScope?.$or ?? null;
 
   if (ownerOr && searchOr) {
     query.$and = [{ $or: ownerOr }, { $or: searchOr }];
@@ -60,14 +85,20 @@ const buildQuery = (dataScope, dateScope, searchOr, extraFilters = {}) => {
   } else if (searchOr) {
     query.$or = searchOr;
   }
+
   return query;
 };
 
-// ── Helper: build interaction object from request body ────────────────────────
-const buildInteractionFromBody = (interaction) => ({
+/**
+ * Build a single interaction sub-document from a flat request body / import row.
+ * All fields are coerced to safe types; unknowns are dropped silently.
+ */
+const buildInteractionFromBody = (interaction = {}) => ({
   interactionBy:   String(interaction.interactionBy  || "").trim(),
   interactedWith:  String(interaction.interactedWith || "").trim(),
-  interactionDate: interaction.interactionDate ? new Date(interaction.interactionDate) : new Date(),
+  interactionDate: interaction.interactionDate
+    ? new Date(interaction.interactionDate)
+    : new Date(),
   interactionMode: VALID_MODES.includes(interaction.interactionMode)
     ? interaction.interactionMode
     : "Email",
@@ -78,10 +109,11 @@ const buildInteractionFromBody = (interaction) => ({
     : undefined,
 });
 
-// ── Helper: escape regex special characters ───────────────────────────────────
-const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/organisations
+// Create a single organisation with its first interaction
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── POST /api/v1/organisations ────────────────────────────────────────────────
 export const createOrganisation = asyncHandler(async (req, res) => {
   const {
     centreType, centreName, website, address,
@@ -89,13 +121,21 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     contacts, onboardedBy, ninAin, interaction,
   } = req.body;
 
-  if (!centreType || !centreName || !address || !city || !state || !pincode || !contacts || !onboardedBy || !interaction)
-    return sendError(res, 422, "Missing required fields: centreType, centreName, address, city, state, pincode, contacts, onboardedBy, interaction.");
+  // ── Required-field gate ────────────────────────────────────────────────────
+  if (
+    !centreType || !centreName || !address || !city ||
+    !state      || !pincode   || !contacts || !onboardedBy || !interaction
+  ) {
+    return sendError(
+      res, 422,
+      "Missing required fields: centreType, centreName, address, city, state, pincode, contacts, onboardedBy, interaction."
+    );
+  }
 
   if (!Array.isArray(contacts) || contacts.length === 0)
     return sendError(res, 422, "Contacts must be a non-empty array.");
 
-  // partial_admin: check specific module/centreType access
+  // ── partial_admin centreType access gate ───────────────────────────────────
   if (req.user.role === "partial_admin") {
     const mods = req.user.permissions?.allowedModules ?? [];
     const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
@@ -110,18 +150,13 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     }
   }
 
-  // ── DUPLICATE CHECK ─────────────────────────────────────────────────────────
-  // Combination of centreType + centreName (case-insensitive) + pincode
-  // is treated as a unique fingerprint for an organisation at a location.
+  // ── Duplicate check (centreName + centreType + pincode) ────────────────────
   const normalisedPincode = normalisePincode(pincode);
 
   const duplicate = await Organisation.findOne({
     centreType,
-    centreName: {
-      $regex:   `^${escapeRegex(centreName.trim())}$`,
-      $options: "i",
-    },
-    pincode: normalisedPincode,
+    centreName: { $regex: `^${escapeRegex(centreName.trim())}$`, $options: "i" },
+    pincode:    normalisedPincode,
   })
     .select("_id centreName centreType city district state pincode")
     .lean();
@@ -131,27 +166,28 @@ export const createOrganisation = asyncHandler(async (req, res) => {
       .filter(Boolean)
       .join(", ");
     return sendError(
-      res,
-      409,
-      `Duplicate entry: "${duplicate.centreName}" (${duplicate.centreType}) is already registered at pincode ${duplicate.pincode}${location ? ` — ${location}` : ""}. Please verify before re-submitting.`
+      res, 409,
+      `Duplicate entry: "${duplicate.centreName}" (${duplicate.centreType}) is already registered` +
+      ` at pincode ${duplicate.pincode}${location ? ` — ${location}` : ""}.` +
+      ` Please verify before re-submitting.`
     );
   }
-  // ── END DUPLICATE CHECK ─────────────────────────────────────────────────────
 
+  // ── Persist ────────────────────────────────────────────────────────────────
   const finalDistrict = district && String(district).trim()
     ? String(district).trim()
     : String(city).trim();
 
   try {
     const organisation = await Organisation.create({
-      centreType:  centreType.trim(),
-      centreName:  centreName.trim(),
-      website:     normaliseWebsite(website),
-      address:     address.trim(),
-      city:        city.trim(),
-      district:    finalDistrict,
-      state:       state.trim(),
-      pincode:     normalisedPincode,
+      centreType:   centreType.trim(),
+      centreName:   centreName.trim(),
+      website:      normaliseWebsite(website),
+      address:      address.trim(),
+      city:         city.trim(),
+      district:     finalDistrict,
+      state:        state.trim(),
+      pincode:      normalisedPincode,
       contacts: contacts.map((c, i) => {
         if (!c || typeof c !== "object") throw new Error(`Invalid contact at index ${i}`);
         return {
@@ -163,31 +199,218 @@ export const createOrganisation = asyncHandler(async (req, res) => {
       }),
       interactions: [buildInteractionFromBody(interaction)],
       onboardedBy:  String(onboardedBy).trim(),
-      ninAin:       ninAin?.trim() || undefined,
+      ninAin:       ninAin?.trim()  || undefined,
       registeredBy: req.user._id,
       status:       normaliseDataStatus(req.body.status),
     });
 
     return sendSuccess(res, 201, "Organisation registered successfully.", { organisation });
   } catch (err) {
-    if (err.code === 11000)             return sendError(res, 409, "A record with this information already exists.");
-    if (err.name === "ValidationError") return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
-    if (err.message?.includes("Invalid contact")) return sendError(res, 422, err.message);
+    if (err.code === 11000)
+      return sendError(res, 409, "A record with this information already exists.");
+    if (err.name === "ValidationError")
+      return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
+    if (err.message?.includes("Invalid contact"))
+      return sendError(res, 422, err.message);
     throw err;
   }
 });
 
-// ── POST /api/v1/organisations/:id/interactions ───────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/organisations/bulk/check-duplicates
+//
+// Accepts up to BULK_LIMIT incoming records and returns which ones already
+// exist in the DB (matched on centreName + centreType + pincode, case-insensitive).
+// This is a READ-ONLY pre-flight — nothing is written.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
+  const { records } = req.body;
+
+  if (!Array.isArray(records) || records.length === 0)
+    return sendError(res, 422, "Request body must contain a non-empty records array.");
+
+  if (records.length > BULK_LIMIT)
+    return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
+
+  // ── Build one $or query that covers every incoming record ──────────────────
+  // Filter out records that are missing the minimum fingerprint fields so we
+  // don't send malformed conditions to MongoDB ($or: [] is a Mongo error).
+  const orConditions = records
+    .map((r) => {
+      const name = String(r.centreName || "").trim();
+      const type = String(r.centreType || "").trim();
+      const pin  = normalisePincode(r.pincode);
+      if (!name || !type || !pin) return null;          // incomplete — skip
+      return {
+        centreType: type,
+        centreName: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
+        pincode:    pin,
+      };
+    })
+    .filter(Boolean);
+
+  // If every record was incomplete, short-circuit — nothing to check
+  if (orConditions.length === 0) {
+    return sendSuccess(res, 200, "Duplicate check completed.", {
+      duplicates: [],
+      cleanCount: records.length,
+      total:      records.length,
+    });
+  }
+
+  // Single DB round-trip for all records
+  const existingDocs = await Organisation.find({ $or: orConditions })
+    .select("centreName centreType pincode city district state")
+    .lean();
+
+  // O(1) lookup map: "name___type___pin" → existing doc
+  const existingMap = new Map();
+  existingDocs.forEach((doc) => {
+    const key = [
+      doc.centreName.toLowerCase().trim(),
+      doc.centreType,
+      doc.pincode,
+    ].join("___");
+    existingMap.set(key, doc);
+  });
+
+  // Match incoming records against the map
+  const duplicates = [];
+  records.forEach((r, index) => {
+    const name = String(r.centreName || "").trim().toLowerCase();
+    const type = String(r.centreType || "").trim();
+    const pin  = normalisePincode(r.pincode);
+    const key  = `${name}___${type}___${pin}`;
+
+    const existDoc = existingMap.get(key);
+    if (existDoc) {
+      duplicates.push({
+        index,           // position in original array — used by frontend to correlate
+        incoming: r,     // the row that was about to be imported
+        existing: existDoc, // what's already in the DB
+      });
+    }
+  });
+
+  return sendSuccess(res, 200, "Duplicate check completed.", {
+    duplicates,
+    cleanCount: records.length - duplicates.length,
+    total:      records.length,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/organisations/bulk
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
+  const { records } = req.body;
+
+  if (!Array.isArray(records) || records.length === 0)
+    return sendError(res, 422, "Request body must contain a non-empty records array.");
+
+  if (records.length > BULK_LIMIT)
+    return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
+
+  const sanitised = records.map((r) => {
+    const slug     = String(r.centreName || r.name || "record")
+      .toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 24);
+    const district = String(r.district || r.city || "Unknown District").trim();
+
+    return {
+      centreType:   String(r.centreType || "").trim(),
+      centreName:   String(r.centreName || "").trim(),
+      website:      normaliseWebsite(r.website),
+      address:      String(r.address    || "").trim(),
+      city:         String(r.city       || "").trim(),
+      district,
+      state:        String(r.state      || "").trim(),
+      pincode:      normalisePincode(r.pincode),
+      contacts: [{
+        name:          String(r.contactPerson || r.name || r.centreName || "Administrator").trim(),
+        designation:   String(r.designation   || "Administrator").trim(),
+        contactNumber: String(r.phone || r.mobile || r.contactNumber || "9999999999").trim(),
+        email:         normaliseEmail(r.email, slug),
+      }],
+      interactions: [{
+        interactionBy:  String(r.interactionBy  || r.onboardedBy || "System Import").trim(),
+        interactedWith: String(
+          r.interactedWith || r.contactPerson || r.name || r.centreName || "Administrator"
+        ).trim(),
+        interactionDate:  r.interactionDate ? new Date(r.interactionDate) : new Date(),
+        interactionMode:  VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
+        notes:            String(r.notes || "Imported via bulk upload").trim(),
+        ninAin:           String(r.ninAin || r.interactionNinAin || "").trim()
+                            || `IMPORT-${slug.toUpperCase().slice(0, 10)}`,
+        ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
+          ? { nextInteractionDate: new Date(r.nextInteractionDate) }
+          : {}),
+      }],
+      onboardedBy:  String(r.onboardedBy || "System Import").trim(),
+      ninAin:       String(r.ninAin || "").trim()
+                      || `NIN-IMPORT-${slug.toUpperCase().slice(0, 10)}`,
+      registeredBy: req.user._id,
+      status:       normaliseDataStatus(r.status),
+    };
+  });
+
+  try {
+    const result = await Organisation.insertMany(sanitised, {
+      ordered:       false,   // continue on error — maximise successful inserts
+      runValidators: true,
+    });
+
+    return sendSuccess(res, 201, "Bulk import completed.", {
+      inserted: result.length,
+      failed:   records.length - result.length,
+      total:    records.length,
+    });
+
+  } catch (err) {
+    if (err.name === "BulkWriteError") {
+      const inserted    = err.result?.nInserted ?? 0;
+      const failed      = records.length - inserted;
+      const writeErrors = (err.writeErrors ?? []).slice(0, 20);
+
+      writeErrors.forEach((e) =>
+        console.error(`[BulkImport] Row ${e.index} failed:`, e.errmsg)
+      );
+
+      // 207 Multi-Status: partial success
+      return res.status(207).json({
+        success:  true,
+        message:  `${inserted} imported, ${failed} failed.`,
+        inserted,
+        failed,
+        total:    records.length,
+        errors:   writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
+      });
+    }
+
+    console.error("[BulkImport] Fatal:", err.message);
+    return sendError(res, 500, err.message || "Bulk import failed.");
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/organisations/:id/interactions
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const addInteraction = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { interactionBy, interactedWith, interactionDate, interactionMode } = req.body;
 
   if (!interactionBy || !interactedWith || !interactionDate || !interactionMode)
-    return sendError(res, 422, "Missing required fields: interactionBy, interactedWith, interactionDate, interactionMode.");
+    return sendError(
+      res, 422,
+      "Missing required fields: interactionBy, interactedWith, interactionDate, interactionMode."
+    );
 
   if (!VALID_MODES.includes(interactionMode))
     return sendError(res, 422, `Invalid interactionMode. Must be one of: ${VALID_MODES.join(", ")}.`);
 
+  // data_entry users may only edit their own records
   if (req.user.role === "data_entry") {
     const existing = await Organisation.findById(id).lean();
     if (!existing) return sendError(res, 404, "Organisation not found.");
@@ -208,7 +431,7 @@ export const addInteraction = asyncHandler(async (req, res) => {
 
     const added = organisation.interactions[organisation.interactions.length - 1];
     return sendSuccess(res, 201, "Interaction added successfully.", {
-      interaction: added,
+      interaction:       added,
       totalInteractions: organisation.interactions.length,
     });
   } catch (err) {
@@ -218,7 +441,10 @@ export const addInteraction = asyncHandler(async (req, res) => {
   }
 });
 
-// ── GET /api/v1/organisations/:id/interactions ────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/:id/interactions
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const getInteractions = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -228,6 +454,7 @@ export const getInteractions = asyncHandler(async (req, res) => {
 
   if (!organisation) return sendError(res, 404, "Organisation not found.");
 
+  // Return newest first (reverse of insertion order)
   const history = [...(organisation.interactions || [])].reverse();
 
   return sendSuccess(res, 200, "Interactions retrieved successfully.", {
@@ -237,95 +464,10 @@ export const getInteractions = asyncHandler(async (req, res) => {
   });
 });
 
-// ── POST /api/v1/organisations/bulk ──────────────────────────────────────────
-export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
-  const { records } = req.body;
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/meta/districts
+// ─────────────────────────────────────────────────────────────────────────────
 
-  if (!Array.isArray(records) || records.length === 0)
-    return sendError(res, 422, "Request body must contain a non-empty records array.");
-  if (records.length > BULK_LIMIT)
-    return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
-
-  const sanitised = records.map((r) => {
-    const slug     = String(r.centreName || r.name || "record").toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 24);
-    const district = String(r.district || r.city || "Unknown District").trim();
-
-    const interactionEntry = {
-      interactionBy:  String(r.interactionBy  || r.onboardedBy || "System Import").trim(),
-      interactedWith: String(r.interactedWith || r.contactPerson || r.name || r.centreName || "Administrator").trim(),
-      interactionDate: r.interactionDate ? new Date(r.interactionDate) : new Date(),
-      interactionMode: VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
-      notes:           String(r.notes || "Imported via bulk upload").trim(),
-      ninAin:          String(r.ninAin || r.interactionNinAin || "").trim() || `IMPORT-${slug.toUpperCase().slice(0, 10)}`,
-      ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
-        ? { nextInteractionDate: new Date(r.nextInteractionDate) }
-        : {}),
-    };
-
-    return {
-      centreType:  String(r.centreType || "").trim(),
-      centreName:  String(r.centreName || "").trim(),
-      website:     normaliseWebsite(r.website),
-      address:     String(r.address   || "").trim(),
-      city:        String(r.city      || "").trim(),
-      district,
-      state:       String(r.state     || "").trim(),
-      pincode:     normalisePincode(r.pincode),
-      contacts: [{
-        name:          String(r.contactPerson || r.name || r.centreName || "Administrator").trim(),
-        designation:   String(r.designation   || "Administrator").trim(),
-        contactNumber: String(r.phone || r.mobile || r.contactNumber || "9999999999").trim(),
-        email:         normaliseEmail(r.email, slug),
-      }],
-      interactions: [interactionEntry],
-      onboardedBy:  String(r.onboardedBy || "System Import").trim(),
-      ninAin:       String(r.ninAin || "").trim() || `NIN-IMPORT-${slug.toUpperCase().slice(0, 10)}`,
-      registeredBy: req.user._id,
-      status:       normaliseDataStatus(r.status),
-    };
-  });
-
-  try {
-    const result = await Organisation.insertMany(sanitised, {
-      ordered:       false,
-      runValidators: true,
-    });
-
-    return sendSuccess(res, 201, "Bulk import completed.", {
-      inserted: result.length,
-      failed:   records.length - result.length,
-      total:    records.length,
-    });
-
-  } catch (err) {
-    if (err.name === "BulkWriteError") {
-      const inserted    = err.result?.nInserted ?? 0;
-      const failed      = records.length - inserted;
-      const writeErrors = err.writeErrors ?? [];
-
-      writeErrors.forEach((e) => {
-        console.error(`[BulkImport] Row ${e.index} failed:`, e.errmsg);
-      });
-
-      return res.status(207).json({
-        success:  true,
-        message:  `${inserted} imported, ${failed} failed.`,
-        inserted,
-        failed,
-        total:    records.length,
-        errors:   writeErrors.slice(0, 20).map((e) => ({
-          index:   e.index,
-          message: e.errmsg,
-        })),
-      });
-    }
-
-    console.error("[BulkImport] Fatal:", err.message);
-    return sendError(res, 500, err.message || "Bulk import failed.");
-  }
-});
-
-// ── GET /api/v1/organisations/meta/districts ──────────────────────────────────
 export const getDistrictsByState = asyncHandler(async (req, res) => {
   const state = String(req.query.state || "").trim();
   if (!state) return sendError(res, 422, "Query param 'state' is required.");
@@ -336,7 +478,10 @@ export const getDistrictsByState = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Districts retrieved successfully.", { districts });
 });
 
-// ── GET /api/v1/organisations/volunteers/meta/districts ───────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/volunteers/meta/districts
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const getVolunteerDistrictsByState = asyncHandler(async (req, res) => {
   const state = String(req.query.state || "").trim();
   if (!state) return sendError(res, 422, "Query param 'state' is required.");
@@ -347,10 +492,13 @@ export const getVolunteerDistrictsByState = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Districts retrieved successfully.", { districts });
 });
 
-// ── GET /api/v1/organisations ─────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const getAllOrganisations = asyncHandler(async (req, res) => {
   const {
-    page = 1, limit = 12,
+    page  = 1, limit = 12,
     search, sortField, sortDir,
     status, state, district, city, centreType,
   } = req.query;
@@ -360,16 +508,18 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
 
   const extraFilters = {};
 
+  // partial_admin: restrict visible centreTypes to allowed modules
   if (req.user.role === "partial_admin") {
     const mods = req.user.permissions?.allowedModules ?? [];
     const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
-    const centreTypes = mods.filter((m) => CENTRE_TYPES.includes(m));
-    if (centreTypes.length > 0) {
-      if (centreType && centreTypes.includes(centreType)) {
-        extraFilters.centreType = centreType;
-      } else {
-        extraFilters.centreType = { $in: centreTypes };
-      }
+    const allowedTypes = mods.filter((m) => CENTRE_TYPES.includes(m));
+
+    if (allowedTypes.length > 0) {
+      // If the requested centreType filter is within their scope, honour it;
+      // otherwise restrict to everything they're allowed to see
+      extraFilters.centreType = (centreType && allowedTypes.includes(centreType))
+        ? centreType
+        : { $in: allowedTypes };
     } else if (centreType) {
       extraFilters.centreType = centreType;
     }
@@ -383,7 +533,7 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
   if (city)     extraFilters.city     = city;
 
   let searchOr = null;
-  if (search && search.trim()) {
+  if (search?.trim()) {
     const regex     = { $regex: search.trim(), $options: "i" };
     const searchStr = search.trim();
     searchOr = [
@@ -413,7 +563,7 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
     Organisation.countDocuments(query),
   ]);
 
-  const hidden  = getHiddenFields(req);
+  const hidden   = getHiddenFields(req);
   const safeOrgs = stripHiddenFields(organisations, hidden);
 
   return sendSuccess(res, 200, "Organisations retrieved successfully.", {
@@ -424,15 +574,18 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
   });
 });
 
-// ── GET /api/v1/organisations/:id ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/:id
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const getOrganisationById = asyncHandler(async (req, res) => {
   const organisation = await Organisation.findById(req.params.id)
     .populate("registeredBy", "fullName email");
+
   if (!organisation) return sendError(res, 404, "Organisation not found.");
 
-  if (req.user.role === "data_entry" && !verifyOwnRecord(organisation, req.user._id)) {
+  if (req.user.role === "data_entry" && !verifyOwnRecord(organisation, req.user._id))
     return sendError(res, 403, "You can only view records you created.");
-  }
 
   const hidden  = getHiddenFields(req);
   const safeOrg = stripHiddenFields(organisation.toObject(), hidden);
@@ -440,24 +593,27 @@ export const getOrganisationById = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Organisation retrieved successfully.", { organisation: safeOrg });
 });
 
-// ── PUT /api/v1/organisations/:id ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/v1/organisations/:id
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const updateOrganisation = asyncHandler(async (req, res) => {
   if (req.user.role === "data_entry") {
     const existing = await Organisation.findById(req.params.id).lean();
     if (!existing) return sendError(res, 404, "Organisation not found.");
-    if (!verifyOwnRecord(existing, req.user._id)) {
+    if (!verifyOwnRecord(existing, req.user._id))
       return sendError(res, 403, "You can only edit records you created.");
-    }
   }
 
-  const allowed = [
+  const ALLOWED_FIELDS = [
     "centreType", "centreName", "website", "address",
     "city", "district", "state", "pincode",
     "contacts", "onboardedBy", "ninAin", "status",
     "interaction",
   ];
+
   const updates = {};
-  allowed.forEach((f) => {
+  ALLOWED_FIELDS.forEach((f) => {
     if (req.body[f] !== undefined) updates[f] = req.body[f];
   });
 
@@ -467,18 +623,13 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
 
   const mongoUpdate = { $set: {} };
 
+  // An "interaction" in the update body appends a new interaction entry
   if (updates.interaction) {
-    const interactionData = updates.interaction;
+    mongoUpdate.$push = { interactions: buildInteractionFromBody(updates.interaction) };
     delete updates.interaction;
-    mongoUpdate.$push = {
-      interactions: buildInteractionFromBody(interactionData),
-    };
   }
 
-  Object.keys(updates).forEach((k) => {
-    mongoUpdate.$set[k] = updates[k];
-  });
-
+  Object.entries(updates).forEach(([k, v]) => { mongoUpdate.$set[k] = v; });
   if (Object.keys(mongoUpdate.$set).length === 0) delete mongoUpdate.$set;
 
   try {
@@ -496,14 +647,16 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
   }
 });
 
-// ── DELETE /api/v1/organisations/:id ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /api/v1/organisations/:id
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const deleteOrganisation = asyncHandler(async (req, res) => {
   if (req.user.role === "data_entry") {
     const existing = await Organisation.findById(req.params.id).lean();
     if (!existing) return sendError(res, 404, "Organisation not found.");
-    if (!verifyOwnRecord(existing, req.user._id)) {
+    if (!verifyOwnRecord(existing, req.user._id))
       return sendError(res, 403, "You can only delete records you created.");
-    }
   }
 
   const organisation = await Organisation.findByIdAndDelete(req.params.id);
