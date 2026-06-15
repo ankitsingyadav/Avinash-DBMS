@@ -42,11 +42,14 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
-    age: {
-      type: Number,
-      required: [true, "Age is required"],
-      min: [13, "You must be at least 13 years old"],
-      max: [120, "Please provide a valid age"],
+    // ── Team Name (replaces age) ────────────────────────────────────────────
+    teamName: {
+      type: String,
+      required: [true, "Team name is required"],
+      enum: {
+        values: ["Echo", "Veeho", "Simarna", "Mam Pinacle", "Picasso"],
+        message: "Please select a valid team name",
+      },
     },
 
     // ── Roles: user | admin (legacy) | full_admin | partial_admin | data_entry

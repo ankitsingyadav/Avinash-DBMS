@@ -1,0 +1,1 @@
+export const TEAM_NAMES = ["Echo", "Veeho", "Simarna", "Mam Pinacle", "Picasso"];

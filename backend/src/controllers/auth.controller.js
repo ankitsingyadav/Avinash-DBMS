@@ -18,6 +18,7 @@ import {
   uploadToCloudinary,
   deleteFromCloudinary,
 } from "../middleware/upload.middleware.js";
+import { TEAM_NAMES } from "../constants/teamNames.js";
 
 // ─── Helper: Attach tokens to response ───────────────────────────────────────
 const sendTokenResponse = async (user, statusCode, res, message) => {
@@ -48,11 +49,16 @@ const sendTokenResponse = async (user, statusCode, res, message) => {
 
 // ─── SIGNUP ───────────────────────────────────────────────────────────────────
 export const signup = asyncHandler(async (req, res) => {
-  const { fullName, email, phone, password, age } = req.body;
+  const { fullName, email, phone, password, teamName } = req.body;
 
   // Validate required fields
-  if (!fullName || !email || !phone || !password || !age) {
-    return sendError(res, 422, "All fields are required: fullName, email, phone, password, age");
+  if (!fullName || !email || !phone || !password || !teamName) {
+    return sendError(res, 422, "All fields are required: fullName, email, phone, password, teamName");
+  }
+
+  // Validate team name
+  if (!TEAM_NAMES.includes(teamName)) {
+    return sendError(res, 422, "Please select a valid team name.");
   }
 
   // Check if user already exists
@@ -85,7 +91,7 @@ export const signup = asyncHandler(async (req, res) => {
     email: email.toLowerCase().trim(),
     phone: phone.trim(),
     password,
-    age: parseInt(age),
+    teamName,
     profileImage,
     role: "user", // Always user — never from request body
   });
@@ -292,8 +298,13 @@ export const resetPassword = asyncHandler(async (req, res) => {
 
 // ─── UPDATE PROFILE ───────────────────────────────────────────────────────────
 export const updateProfile = asyncHandler(async (req, res) => {
-  const { fullName, phone, age } = req.body;
+  const { fullName, phone, teamName } = req.body;
   const user = await User.findById(req.user._id);
+
+  // Validate team name if provided
+  if (teamName && !TEAM_NAMES.includes(teamName)) {
+    return sendError(res, 422, "Please select a valid team name.");
+  }
 
   // Handle profile image update
   if (req.file) {
@@ -311,7 +322,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   if (fullName) user.fullName = fullName.trim();
   if (phone) user.phone = phone.trim();
-  if (age) user.age = parseInt(age);
+  if (teamName) user.teamName = teamName;
 
   await user.save();
 

@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore from "../context/authStore";
+import { TEAM_NAMES } from "../constants/teamNames";
 
 const EyeIcon = ({ show }) =>
   show ? (
@@ -20,7 +21,7 @@ export default function SignupPage() {
   const fileRef = useRef(null);
 
   const [form, setForm] = useState({
-    fullName: "", email: "", phone: "", password: "", age: "",
+    fullName: "", email: "", phone: "", password: "", teamName: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -37,8 +38,8 @@ export default function SignupPage() {
       e.phone = "Enter a valid phone number (10-15 digits)";
     if (form.password.length < 8)
       e.password = "Password must be at least 8 characters";
-    if (!form.age || form.age < 13 || form.age > 120)
-      e.age = "Age must be between 13 and 120";
+    if (!form.teamName || !TEAM_NAMES.includes(form.teamName))
+      e.teamName = "Please select a valid team name";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -202,24 +203,33 @@ export default function SignupPage() {
             {errors.phone && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>⚠ {errors.phone}</p>}
           </div>
 
-          {/* Age + Password row */}
+          {/* Team Name + Password row */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Age</label>
-              <input
-                name="age" type="number" value={form.age} onChange={handleChange}
-                placeholder="25" min="13" max="120"
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Team Name</label>
+              <select
+                name="teamName" value={form.teamName} onChange={handleChange}
                 style={{
                   width: "100%", padding: "11px 14px",
-                  border: errors.age ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
+                  border: errors.teamName ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
                   borderRadius: "10px", fontSize: "14px",
-                  color: "#0f172a", background: errors.age ? "#fff7f7" : "#f8fafc",
+                  color: form.teamName ? "#0f172a" : "#94a3b8",
+                  background: errors.teamName ? "#fff7f7" : "#f8fafc",
                   outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                  cursor: "pointer", appearance: "none",
+                  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 14px center",
                 }}
-                onFocus={e => { e.target.style.borderColor = "#0ea5e9"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(14,165,233,0.1)"; }}
-                onBlur={e => { e.target.style.borderColor = errors.age ? "#fca5a5" : "#e2e8f0"; e.target.style.background = errors.age ? "#fff7f7" : "#f8fafc"; e.target.style.boxShadow = "none"; }}
-              />
-              {errors.age && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>⚠ {errors.age}</p>}
+                onFocus={e => { e.target.style.borderColor = "#0ea5e9"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(14,165,233,0.1)"; e.target.style.backgroundImage = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")"; e.target.style.backgroundRepeat = "no-repeat"; e.target.style.backgroundPosition = "right 14px center"; }}
+                onBlur={e => { e.target.style.borderColor = errors.teamName ? "#fca5a5" : "#e2e8f0"; e.target.style.background = errors.teamName ? "#fff7f7" : "#f8fafc"; e.target.style.boxShadow = "none"; e.target.style.backgroundImage = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")"; e.target.style.backgroundRepeat = "no-repeat"; e.target.style.backgroundPosition = "right 14px center"; }}
+              >
+                <option value="" disabled>Select team</option>
+                {TEAM_NAMES.map((team) => (
+                  <option key={team} value={team}>{team}</option>
+                ))}
+              </select>
+              {errors.teamName && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>⚠ {errors.teamName}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>Password</label>

@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import useAuthStore from "../context/authStore";
+import { TEAM_NAMES } from "../constants/teamNames";
 
 export default function ProfilePage() {
   const { user, updateProfile, isLoading } = useAuthStore();
@@ -13,7 +14,7 @@ export default function ProfilePage() {
   const [form, setForm] = useState({
     fullName: user?.fullName || "",
     phone:    user?.phone    || "",
-    age:      user?.age      || "",
+    teamName: user?.teamName || "",
   });
   const [preview, setPreview]     = useState(null);
   const [imageFile, setImageFile] = useState(null);
@@ -43,7 +44,7 @@ export default function ProfilePage() {
     const fd = new FormData();
     if (form.fullName !== user.fullName) fd.append("fullName", form.fullName);
     if (form.phone    !== user.phone)    fd.append("phone",    form.phone);
-    if (form.age      !== user.age)      fd.append("age",      form.age);
+    if (form.teamName !== user.teamName) fd.append("teamName", form.teamName);
     if (imageFile) fd.append("profileImage", imageFile);
     const result = await updateProfile(fd);
     if (result.success) {
@@ -60,7 +61,7 @@ export default function ProfilePage() {
     setForm({
       fullName: user?.fullName || "",
       phone:    user?.phone    || "",
-      age:      user?.age      || "",
+      teamName: user?.teamName || "",
     });
   };
 
@@ -191,7 +192,7 @@ export default function ProfilePage() {
             {/* Stats row */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" }}>
               {[
-                { label: "Age",        value: user?.age ? `${user.age}y` : "—" },
+                { label: "Team",       value: user?.teamName || "—" },
                 { label: "Joined",     value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—" },
                 { label: "Last Login", value: user?.lastLogin  ? new Date(user.lastLogin).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "Today" },
               ].map((s) => (
@@ -218,15 +219,18 @@ export default function ProfilePage() {
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: "#374151", marginBottom: "6px" }}>Age</label>
-                    <input
-                      type="number"
-                      value={form.age}
-                      onChange={(e) => setForm((p) => ({ ...p, age: e.target.value }))}
-                      placeholder="Age" min="13" max="120"
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: "#374151", marginBottom: "6px" }}>Team Name</label>
+                    <select
+                      value={form.teamName}
+                      onChange={(e) => setForm((p) => ({ ...p, teamName: e.target.value }))}
                       style={inputStyle}
                       onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                    >
+                      <option value="" disabled>Select team</option>
+                      {TEAM_NAMES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div>
