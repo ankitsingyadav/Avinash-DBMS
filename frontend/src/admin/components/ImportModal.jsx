@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import axios from "../../utils/axios.js";
 import { CATEGORIES, IMPORT_BATCH_SIZE } from "../constants.js";
 import { parseWorkbook, validatePlan, buildPayload } from "../helpers.js";
-import DuplicateReviewModal from "./DuplicateReviewModal.jsx";
+import DuplicateReviewModal from "./Duplicatereviewmodal.jsx";
 // ── Upload a single batch — tries bulk endpoint, falls back to sequential ─────
 async function uploadBatch(endpoint, batch, fields) {
   const payloads = batch.map((r) => buildPayload(r, fields));
