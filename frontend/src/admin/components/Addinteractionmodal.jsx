@@ -21,6 +21,7 @@ const EMPTY_FORM = {
   notes:               "",
   ninAin:              "",
   nextInteractionDate: "",
+  nextNotes:           "",   // ── ADDED
 };
 
 export default function AddInteractionModal({ isOpen, onClose, record, category, onSaved }) {
@@ -70,6 +71,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
       if (form.notes.trim())        payload.notes               = form.notes.trim();
       if (form.ninAin.trim())       payload.ninAin              = form.ninAin.trim();
       if (form.nextInteractionDate) payload.nextInteractionDate = form.nextInteractionDate;
+      if (form.nextNotes.trim())    payload.nextNotes           = form.nextNotes.trim(); // ── ADDED
 
       await axios.post(`${category.endpoint}/${record._id}/interactions`, payload);
       toast.success("Interaction recorded successfully!");
@@ -253,6 +255,19 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                   <p className="text-red-500 text-xs">{errors.interactionMode}</p>
                 )}
               </div>
+
+              {/* ── nextNotes — ADDED ── */}
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</label>
+                <textarea
+                  rows={3}
+                  value={form.nextNotes}
+                  onChange={(e) => set("nextNotes", e.target.value)}
+                  placeholder="Any notes for the next interaction..."
+                  className={inputCls(false) + " resize-none"}
+                />
+              </div>
+
             </div>
           </div>
         </div>

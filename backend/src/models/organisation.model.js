@@ -62,6 +62,11 @@ const interactionSchema = new mongoose.Schema(
     nextInteractionDate: {
       type: Date,
     },
+    // ── NEW: notes specific to the next planned interaction ───────────────────
+    nextNotes: {
+      type: String,
+      trim: true,
+    },
     interactionMode: {
       type: String,
       required: [true, "Interaction mode is required"],
@@ -166,9 +171,6 @@ const organisationSchema = new mongoose.Schema(
     },
 
     // ── Data completion status (replaces Active/Inactive) ─────────────────────
-    // Basic   = minimal info entered
-    // Partial = some fields complete
-    // Complete = all fields verified and complete
     status: {
       type: String,
       enum: {

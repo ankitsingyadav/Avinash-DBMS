@@ -42,14 +42,13 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
-    // ── Team Name (replaces age) ────────────────────────────────────────────
-    teamName: {
+    // ── NIN / AIN Number (replaces teamName) ────────────────────────────────
+    ninAinNumber: {
       type: String,
-      required: [true, "Team name is required"],
-      enum: {
-        values: ["Echo", "Veeho", "Simarna", "Mam Pinacle", "Picasso"],
-        message: "Please select a valid team name",
-      },
+      required: [true, "NIN / AIN number is required"],
+      trim: true,
+      minlength: [2, "NIN / AIN number must be at least 2 characters"],
+      maxlength: [50, "NIN / AIN number cannot exceed 50 characters"],
     },
 
     // ── Roles: user | admin (legacy) | full_admin | partial_admin | data_entry

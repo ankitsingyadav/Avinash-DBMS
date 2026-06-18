@@ -3,7 +3,6 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import useAuthStore from "../context/authStore";
-import { TEAM_NAMES } from "../constants/teamNames";
 
 export default function ProfilePage() {
   const { user, updateProfile, isLoading } = useAuthStore();
@@ -12,9 +11,9 @@ export default function ProfilePage() {
 
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({
-    fullName: user?.fullName || "",
-    phone:    user?.phone    || "",
-    teamName: user?.teamName || "",
+    fullName:     user?.fullName     || "",
+    phone:        user?.phone        || "",
+    ninAinNumber: user?.ninAinNumber || "",
   });
   const [preview, setPreview]     = useState(null);
   const [imageFile, setImageFile] = useState(null);
@@ -42,9 +41,9 @@ export default function ProfilePage() {
   const handleUpdate = async (e) => {
     e.preventDefault();
     const fd = new FormData();
-    if (form.fullName !== user.fullName) fd.append("fullName", form.fullName);
-    if (form.phone    !== user.phone)    fd.append("phone",    form.phone);
-    if (form.teamName !== user.teamName) fd.append("teamName", form.teamName);
+    if (form.fullName     !== user.fullName)     fd.append("fullName",     form.fullName);
+    if (form.phone        !== user.phone)        fd.append("phone",        form.phone);
+    if (form.ninAinNumber !== user.ninAinNumber) fd.append("ninAinNumber", form.ninAinNumber);
     if (imageFile) fd.append("profileImage", imageFile);
     const result = await updateProfile(fd);
     if (result.success) {
@@ -59,9 +58,9 @@ export default function ProfilePage() {
     setPreview(null);
     setImageFile(null);
     setForm({
-      fullName: user?.fullName || "",
-      phone:    user?.phone    || "",
-      teamName: user?.teamName || "",
+      fullName:     user?.fullName     || "",
+      phone:        user?.phone        || "",
+      ninAinNumber: user?.ninAinNumber || "",
     });
   };
 
@@ -192,7 +191,7 @@ export default function ProfilePage() {
             {/* Stats row */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" }}>
               {[
-                { label: "Team",       value: user?.teamName || "—" },
+                { label: "NIN / AIN", value: user?.ninAinNumber || "—" },
                 { label: "Joined",     value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—" },
                 { label: "Last Login", value: user?.lastLogin  ? new Date(user.lastLogin).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "Today" },
               ].map((s) => (
@@ -219,18 +218,14 @@ export default function ProfilePage() {
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: "#374151", marginBottom: "6px" }}>Team Name</label>
-                    <select
-                      value={form.teamName}
-                      onChange={(e) => setForm((p) => ({ ...p, teamName: e.target.value }))}
+                    <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: "#374151", marginBottom: "6px" }}>NIN / AIN Number</label>
+                    <input
+                      value={form.ninAinNumber}
+                      onChange={(e) => setForm((p) => ({ ...p, ninAinNumber: e.target.value }))}
+                      placeholder="e.g. NIN123456"
                       style={inputStyle}
                       onFocus={handleFocus} onBlur={handleBlur}
-                    >
-                      <option value="" disabled>Select team</option>
-                      {TEAM_NAMES.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                 </div>
                 <div>

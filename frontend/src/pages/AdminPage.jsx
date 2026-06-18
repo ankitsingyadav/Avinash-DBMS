@@ -12,7 +12,6 @@ import { CATEGORY_ICONS }          from "../admin/icons.jsx";
 import { useDebounce }             from "../admin/helpers.js";
 import FilterDropdown              from "../admin/components/FilterDropdown.jsx";
 import EditModal                   from "../admin/components/EditModal.jsx";
-import ViewModal                   from "../admin/components/ViewModal.jsx";
 import ImportModal                 from "../admin/components/ImportModal.jsx";
 import DataTable                   from "../admin/components/DataTable.jsx";
 import Interactionhistorymodal     from "../admin/components/Interactionhistorymodal.jsx";
@@ -20,13 +19,6 @@ import useAuthStore, { roleHelpers } from "../context/authStore.js";
 import AddInteractionModal from "../admin/components/Addinteractionmodal.jsx";
 
 const ALL_CATS = CATEGORIES.map((c) => ({ ...c, icon: CATEGORY_ICONS[c.id] }));
-
-const isUpcoming48h = (dateStr) => {
-  if (!dateStr) return false;
-  const now = Date.now();
-  const d   = new Date(dateStr).getTime();
-  return d >= now && d <= now + 48 * 60 * 60 * 1000;
-};
 
 function readParams(params, category) {
   const filters = {};
@@ -109,7 +101,6 @@ export default function AdminPage() {
   const [upcomingLoading, setUpcomingLoading] = useState(false);
 
   const [editRecord,    setEditRecord]    = useState(null);
-  const [viewRecord,    setViewRecord]    = useState(null);
   const [deleteRecord,  setDeleteRecord]  = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showImport,    setShowImport]    = useState(false);
@@ -267,6 +258,13 @@ export default function AdminPage() {
     setPage(1);
   };
 
+  // ── Navigate to detail page instead of opening modal ──────────────────────
+  const handleView = (row) => {
+    if (highlightId && String(row._id) === highlightId) setHighlightId("");
+    // Preserve current page in query so back button restores it
+    navigate(`/admin/record/${activeTab}/${row._id}?page=${page}`);
+  };
+
   const handleDelete = async () => {
     if (!deleteRecord || !category) return;
     setDeleteLoading(true);
@@ -340,10 +338,6 @@ export default function AdminPage() {
       <EditModal
         isOpen={!!editRecord} onClose={() => setEditRecord(null)}
         record={editRecord} category={category} onSaved={fetchData}
-      />
-      <ViewModal
-        isOpen={!!viewRecord} onClose={() => setViewRecord(null)}
-        record={viewRecord} category={category} onEdit={setEditRecord} onDelete={setDeleteRecord}
       />
       <ImportModal isOpen={showImport} onClose={() => setShowImport(false)} onUploaded={fetchData} />
       <ConfirmModal
@@ -518,7 +512,7 @@ export default function AdminPage() {
                       key={`${u._id}_${i}`}
                       className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs cursor-pointer transition-all border hover:shadow-sm"
                       style={{ background: bg, border: `1px solid ${color}30`, maxWidth: 260 }}
-                      onClick={() => { const org = data.find((r) => String(r._id) === String(u._id)); if (org) setViewRecord(org); }}
+                      onClick={() => navigate(`/admin/record/organisation/${u._id}`)}
                     >
                       <span style={{ color, fontWeight: 700, fontFamily: "monospace", whiteSpace: "nowrap" }}>{timeLabel}</span>
                       <span className="text-slate-700 truncate max-w-[140px] font-medium">{u.centreName}</span>
@@ -716,7 +710,7 @@ export default function AdminPage() {
           total={upcomingFilter && activeTab === "organisation" ? displayData.length : total}
           sortField={sortField} sortDir={sortDir} onSort={handleSort}
           selectedIds={selectedIds} onToggleAll={handleToggleAll} onToggleRow={handleToggleRow}
-          onView={(row) => { setViewRecord(row); if (highlightId && String(row._id) === highlightId) setHighlightId(""); }}
+          onView={handleView}
           onEdit={canEdit   ? setEditRecord   : null}
           onDelete={canDelete ? setDeleteRecord : null}
           onPageChange={setPage}

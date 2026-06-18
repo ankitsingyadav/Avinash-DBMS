@@ -92,6 +92,10 @@ const buildQuery = (dataScope = {}, dateScope = {}, searchOr = null, extraFilter
 /**
  * Build a single interaction sub-document from a flat request body / import row.
  * All fields are coerced to safe types; unknowns are dropped silently.
+ *
+ * NEW: nextNotes is now passed through — independent notes field for the
+ * "next interaction planned" block (separate from `notes`, which belongs
+ * to the current interaction).
  */
 const buildInteractionFromBody = (interaction = {}) => ({
   interactionBy:   String(interaction.interactionBy  || "").trim(),
@@ -107,6 +111,7 @@ const buildInteractionFromBody = (interaction = {}) => ({
   nextInteractionDate: interaction.nextInteractionDate
     ? new Date(interaction.nextInteractionDate)
     : undefined,
+  nextNotes:           interaction.nextNotes?.trim()          || undefined,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -234,8 +239,6 @@ export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
     return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
 
   // ── Build one $or query that covers every incoming record ──────────────────
-  // Filter out records that are missing the minimum fingerprint fields so we
-  // don't send malformed conditions to MongoDB ($or: [] is a Mongo error).
   const orConditions = records
     .map((r) => {
       const name = String(r.centreName || "").trim();
@@ -345,6 +348,10 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
                             || `IMPORT-${slug.toUpperCase().slice(0, 10)}`,
         ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
           ? { nextInteractionDate: new Date(r.nextInteractionDate) }
+          : {}),
+        // NEW: optional nextNotes column support during bulk import
+        ...(r.nextNotes && String(r.nextNotes).trim()
+          ? { nextNotes: String(r.nextNotes).trim() }
           : {}),
       }],
       onboardedBy:  String(r.onboardedBy || "System Import").trim(),

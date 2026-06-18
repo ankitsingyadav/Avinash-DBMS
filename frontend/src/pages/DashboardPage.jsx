@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import useAuthStore from "../context/authStore";
 import axios from "../utils/axios.js";
-import { TEAM_NAMES } from "../constants/teamNames";
 
 // ─── Mini animated counter ────────────────────────────────────────────────────
 function Counter({ value, duration = 1200 }) {
@@ -592,9 +591,9 @@ export default function DashboardPage() {
 
   const [editMode, setEditMode]   = useState(false);
   const [form, setForm]           = useState({
-    fullName: user?.fullName || "",
-    phone:    user?.phone    || "",
-    teamName: user?.teamName || "",
+    fullName:     user?.fullName     || "",
+    phone:        user?.phone        || "",
+    ninAinNumber: user?.ninAinNumber || "",
   });
   const [preview, setPreview]     = useState(null);
   const [imageFile, setImageFile] = useState(null);
@@ -609,9 +608,9 @@ export default function DashboardPage() {
   const handleUpdate = async (e) => {
     e.preventDefault();
     const fd = new FormData();
-    if (form.fullName !== user.fullName) fd.append("fullName", form.fullName);
-    if (form.phone    !== user.phone)    fd.append("phone",    form.phone);
-    if (form.teamName !== user.teamName) fd.append("teamName", form.teamName);
+    if (form.fullName     !== user.fullName)     fd.append("fullName",     form.fullName);
+    if (form.phone        !== user.phone)        fd.append("phone",        form.phone);
+    if (form.ninAinNumber !== user.ninAinNumber) fd.append("ninAinNumber", form.ninAinNumber);
     if (imageFile) fd.append("profileImage", imageFile);
     const result = await updateProfile(fd);
     if (result.success) { setEditMode(false); setPreview(null); setImageFile(null); }
@@ -705,12 +704,12 @@ export default function DashboardPage() {
               {/* Stats row */}
               <div className="grid grid-cols-3 gap-2 mb-4">
                 {[
-                  { label: "Team",   value: user?.teamName || "—" },
-                  { label: "Joined", value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "2-digit" }) : "—" },
-                  { label: "Login",  value: user?.lastLogin  ? new Date(user.lastLogin).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "Today" },
+                  { label: "NIN/AIN", value: user?.ninAinNumber || "—" },
+                  { label: "Joined",  value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "2-digit" }) : "—" },
+                  { label: "Login",   value: user?.lastLogin  ? new Date(user.lastLogin).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "Today" },
                 ].map((s) => (
                   <div key={s.label} className="bg-slate-50 rounded-xl p-2.5 border border-slate-200 text-center">
-                    <p className="text-slate-800 font-semibold text-sm">{s.value}</p>
+                    <p className="text-slate-800 font-semibold text-sm truncate" title={s.value}>{s.value}</p>
                     <p className="text-slate-400 text-xs mt-0.5">{s.label}</p>
                   </div>
                 ))}
@@ -735,17 +734,13 @@ export default function DashboardPage() {
                       <input value={form.fullName} onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))} className="field-input" placeholder="Full name"/>
                     </div>
                     <div>
-                      <label className="field-label">Team Name</label>
-                      <select
-                        value={form.teamName}
-                        onChange={(e) => setForm((p) => ({ ...p, teamName: e.target.value }))}
+                      <label className="field-label">NIN / AIN Number</label>
+                      <input
+                        value={form.ninAinNumber}
+                        onChange={(e) => setForm((p) => ({ ...p, ninAinNumber: e.target.value }))}
                         className="field-input"
-                      >
-                        <option value="" disabled>Select team</option>
-                        {TEAM_NAMES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
+                        placeholder="Enter NIN / AIN number"
+                      />
                     </div>
                   </div>
                   <div>

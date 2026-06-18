@@ -6,6 +6,11 @@
 //      fields render on white with full contrast — done via a scoped CSS block
 //      injected once at mount (no external deps, no className hacks on child)
 //   3. lightInput helper unchanged — still used for all non-LocationSelector fields
+//   4. NEW: "Next Interaction Planned" now has its own independent Notes field
+//      (interaction.nextNotes) — separate from the current interaction's notes
+//   5. NEW: "Centre Onboarded By" and "AIN / NIN Number" (Additional Details)
+//      auto-populate from the logged-in user (fullName / ninAinNumber) on mount,
+//      but remain fully editable
 
 import React, { useState, useCallback, useEffect } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
@@ -16,6 +21,7 @@ import axios from "../utils/axios";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
 import LocationSelector from "../components/LocationSelector";
+import useAuthStore from "../context/authStore";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const INTERACTION_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
@@ -145,6 +151,7 @@ const organisationSchema = z.object({
     notes:               z.string().optional(),
     ninAin:              z.string().optional(),
     nextInteractionDate: z.string().optional(),
+    nextNotes:           z.string().optional(),
   }),
   onboardedBy: z.string().min(1, "Onboarded by is required"),
   ninAin:      z.string().optional(),
@@ -169,6 +176,7 @@ const DEFAULT_VALUES = {
     notes:               "",
     ninAin:              "",
     nextInteractionDate: "",
+    nextNotes:           "",
   },
   onboardedBy: "",
   ninAin:      "",
@@ -292,6 +300,7 @@ function injectLocationStyles() {
 // ─── Main Page Component ──────────────────────────────────────────────────────
 const OrganisationFormPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [loading,           setLoading]           = useState(false);
   const [showConfirm,       setShowConfirm]       = useState(false);
   const [formData,          setFormData]          = useState(null);
@@ -322,6 +331,19 @@ const OrganisationFormPage = () => {
     mode:           "onBlur",
     reValidateMode: "onChange",
   });
+
+  // ── Default "Onboarded By" / "AIN / NIN Number" from the logged-in user ────
+  // Runs once user data is available. Both fields remain fully editable —
+  // we only set the *initial* value here, register() handles the rest.
+  useEffect(() => {
+    if (!user) return;
+    if (user.fullName) {
+      setValue("onboardedBy", user.fullName, { shouldValidate: false, shouldDirty: false });
+    }
+    if (user.ninAinNumber) {
+      setValue("ninAin", user.ninAinNumber, { shouldValidate: false, shouldDirty: false });
+    }
+  }, [user, setValue]);
 
   const { fields, append, remove } = useFieldArray({ control, name: "contacts" });
   const contactCount = fields.length;
@@ -813,6 +835,20 @@ const OrganisationFormPage = () => {
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
+              </FormField>
+
+              {/* NEW: independent notes field for the next planned interaction */}
+              <FormField
+                label="Notes"
+                error={errors.interaction?.nextNotes?.message}
+                colSpan2
+              >
+                <textarea
+                  {...register("interaction.nextNotes")}
+                  rows={3}
+                  placeholder="Add any notes about the next planned interaction..."
+                  className={lightInput(!!errors.interaction?.nextNotes) + " resize-none"}
+                />
               </FormField>
             </div>
           </section>

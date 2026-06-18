@@ -1,4 +1,4 @@
-// ─── App.jsx ── UPDATED: /notifications route add kiya ───────────────────────
+// ─── App.jsx ── UPDATED: /admin/record/:tab/:id route add kiya ───────────────
 import { useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
@@ -21,7 +21,8 @@ const OrganisationPage     = lazy(() => import("./pages/OrganisationPage"));
 const VolunteerFormPage    = lazy(() => import("./pages/VolunteerFormPage"));
 const OrganisationFormPage = lazy(() => import("./pages/OrganisationFormPage"));
 const AccessControlPage    = lazy(() => import("./pages/AccessControlPage"));
-const Notificationspage    = lazy(() => import("./pages/Notificationspage")); // ← NEW
+const Notificationspage    = lazy(() => import("./pages/Notificationspage"));
+const RecordDetailPage     = lazy(() => import("./pages/RecordDetailPage")); // ← NEW
 
 // ── Page loader ────────────────────────────────────────────────
 function PageLoader() {
@@ -67,7 +68,6 @@ const FullAdminOnly = ({ children }) => {
   );
 };
 
-// Notification page guard — admin roles + notificationAccess permission
 const NotificationsOnly = ({ children }) => {
   const { user } = useAuthStore();
   const isFullAdmin = user?.role === "admin" || user?.role === "full_admin";
@@ -132,6 +132,11 @@ export default function App() {
             element={<AdminOnly><AdminPage /></AdminOnly>}
           />
 
+          {/* ── NEW: Record detail page ── */}
+          <Route path="/admin/record/:tab/:id"
+            element={<AdminOnly><RecordDetailPage /></AdminOnly>}
+          />
+
           <Route path="/organisation"
             element={<ProtectedRoute><OrganisationPage /></ProtectedRoute>}
           />
@@ -146,7 +151,6 @@ export default function App() {
             element={<FullAdminOnly><AccessControlPage /></FullAdminOnly>}
           />
 
-          {/* ── NEW: Notifications page ── */}
           <Route path="/notifications"
             element={<NotificationsOnly><Notificationspage /></NotificationsOnly>}
           />

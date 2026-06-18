@@ -18,7 +18,6 @@ import {
   uploadToCloudinary,
   deleteFromCloudinary,
 } from "../middleware/upload.middleware.js";
-import { TEAM_NAMES } from "../constants/teamNames.js";
 
 // ─── Helper: Attach tokens to response ───────────────────────────────────────
 const sendTokenResponse = async (user, statusCode, res, message) => {
@@ -49,16 +48,16 @@ const sendTokenResponse = async (user, statusCode, res, message) => {
 
 // ─── SIGNUP ───────────────────────────────────────────────────────────────────
 export const signup = asyncHandler(async (req, res) => {
-  const { fullName, email, phone, password, teamName } = req.body;
+  const { fullName, email, phone, password, ninAinNumber } = req.body;
 
   // Validate required fields
-  if (!fullName || !email || !phone || !password || !teamName) {
-    return sendError(res, 422, "All fields are required: fullName, email, phone, password, teamName");
+  if (!fullName || !email || !phone || !password || !ninAinNumber) {
+    return sendError(res, 422, "All fields are required: fullName, email, phone, password, ninAinNumber");
   }
 
-  // Validate team name
-  if (!TEAM_NAMES.includes(teamName)) {
-    return sendError(res, 422, "Please select a valid team name.");
+  // Validate NIN / AIN number (basic non-empty string check)
+  if (!ninAinNumber.trim()) {
+    return sendError(res, 422, "Please provide a valid NIN / AIN number.");
   }
 
   // Check if user already exists
@@ -91,7 +90,7 @@ export const signup = asyncHandler(async (req, res) => {
     email: email.toLowerCase().trim(),
     phone: phone.trim(),
     password,
-    teamName,
+    ninAinNumber: ninAinNumber.trim(),
     profileImage,
     role: "user", // Always user — never from request body
   });
@@ -298,12 +297,12 @@ export const resetPassword = asyncHandler(async (req, res) => {
 
 // ─── UPDATE PROFILE ───────────────────────────────────────────────────────────
 export const updateProfile = asyncHandler(async (req, res) => {
-  const { fullName, phone, teamName } = req.body;
+  const { fullName, phone, ninAinNumber } = req.body;
   const user = await User.findById(req.user._id);
 
-  // Validate team name if provided
-  if (teamName && !TEAM_NAMES.includes(teamName)) {
-    return sendError(res, 422, "Please select a valid team name.");
+  // Validate NIN / AIN number if provided
+  if (ninAinNumber !== undefined && !ninAinNumber.trim()) {
+    return sendError(res, 422, "Please provide a valid NIN / AIN number.");
   }
 
   // Handle profile image update
@@ -322,7 +321,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   if (fullName) user.fullName = fullName.trim();
   if (phone) user.phone = phone.trim();
-  if (teamName) user.teamName = teamName;
+  if (ninAinNumber) user.ninAinNumber = ninAinNumber.trim();
 
   await user.save();
 

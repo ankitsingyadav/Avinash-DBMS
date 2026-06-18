@@ -6,6 +6,7 @@ import axios from "../../utils/axios.js";
 import { CATEGORIES, IMPORT_BATCH_SIZE } from "../constants.js";
 import { parseWorkbook, validatePlan, buildPayload } from "../helpers.js";
 import DuplicateReviewModal from "./Duplicatereviewmodal.jsx";
+
 // ── Upload a single batch — tries bulk endpoint, falls back to sequential ─────
 async function uploadBatch(endpoint, batch, fields) {
   const payloads = batch.map((r) => buildPayload(r, fields));
@@ -24,7 +25,6 @@ async function uploadBatch(endpoint, batch, fields) {
     console.warn("[Import] Bulk error detail:", bulkErr?.response?.data);
   }
 
-  // Fallback: sequential individual requests
   let success = 0;
   let failed  = 0;
   const errors = [];
@@ -60,12 +60,8 @@ async function uploadBatch(endpoint, batch, fields) {
   return { success, failed, errors };
 }
 
-// ── Run pre-flight duplicate check for ONE category plan ─────────────────────
-// Returns { clean: Row[], duplicates: DuplicateEntry[] }
-// Only organisation-type endpoints support /bulk/check-duplicates.
-// Volunteer endpoint pe skip karo (no dedup needed — phone/email unique hain).
+// ── Pre-flight duplicate check ────────────────────────────────────────────────
 async function preflight(p) {
-  // Sirf organisation endpoints pe check karo
   if (!p.endpoint.includes("organisation")) {
     return { clean: p.rows, duplicates: [] };
   }
@@ -77,28 +73,20 @@ async function preflight(p) {
       records: payloads,
     });
 
-    const { duplicates = [], cleanCount } = res.data?.data ?? {};
-
-    // Map duplicate indices back to original rows
+    const { duplicates = [] } = res.data?.data ?? {};
     const dupSet = new Set(duplicates.map((d) => d.index));
     const clean  = p.rows.filter((_, i) => !dupSet.has(i));
 
-    // Enrich duplicates with the category metadata needed by DuplicateReviewModal
     const enriched = duplicates.map((d) => ({
       ...d,
-      incoming: payloads[d.index],  // use built payload (has all normalised fields)
+      incoming: payloads[d.index],
       catLabel:  p.catLabel,
       endpoint:  p.endpoint,
       fields:    p.fields,
     }));
 
-    console.log(
-      `[Import] Pre-flight "${p.catLabel}": ${clean.length} clean, ${enriched.length} duplicates`
-    );
-
     return { clean, duplicates: enriched };
   } catch (err) {
-    // If check-duplicates endpoint is unavailable, proceed without check
     console.warn("[Import] Pre-flight check failed, skipping dedup:", err?.response?.data ?? err.message);
     return { clean: p.rows, duplicates: [] };
   }
@@ -114,10 +102,9 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
   const [valErrors, setValErrors] = useState([]);
   const [failLog,   setFailLog]   = useState([]);
 
-  // ── Duplicate review state ────────────────────────────────────────────────
   const [dupModalOpen,  setDupModalOpen]  = useState(false);
-  const [allDuplicates, setAllDuplicates] = useState([]); // enriched dup entries
-  const [cleanPlan,     setCleanPlan]     = useState([]); // plan items with only non-dup rows
+  const [allDuplicates, setAllDuplicates] = useState([]);
+  const [cleanPlan,     setCleanPlan]     = useState([]);
 
   const fileRef = useRef();
 
@@ -155,13 +142,6 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
           return;
         }
 
-        detected.forEach((d) => {
-          console.log(
-            `[Import] Detected "${d.catLabel}" — ${d.rows.length} rows from sheets: ${d.sheets.join(", ")}`
-          );
-          if (d.rows.length > 0) console.log("[Import] Sample row:", d.rows[0]);
-        });
-
         setPlan(detected);
         setStep("preview");
       } catch (err) {
@@ -181,7 +161,6 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     const active = plan.filter((p) => p.checked);
     if (!active.length) return;
 
-    // 1. Validate
     const errors = validatePlan(active);
     if (errors.length > 0) {
       setValErrors(errors.slice(0, 20));
@@ -189,42 +168,35 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
       return;
     }
 
-    // 2. Pre-flight duplicate check (show checking state briefly)
     setStep("checking");
 
     const preflightResults = await Promise.all(active.map((p) => preflight(p)));
 
-    const gathered = {
-      duplicates: [],
-      cleanPlans:  [],
-    };
+    const gathered = { duplicates: [], cleanPlans: [] };
 
-preflightResults.forEach((result, i) => {
+    preflightResults.forEach((result, i) => {
       gathered.duplicates.push(...result.duplicates);
       if (result.clean.length > 0) {
         gathered.cleanPlans.push({ ...active[i], rows: result.clean });
       }
     });
 
-    // 3. If duplicates found — show review modal, pause upload
     if (gathered.duplicates.length > 0) {
       setAllDuplicates(gathered.duplicates);
       setCleanPlan(gathered.cleanPlans);
-      setStep("preview"); // go back to preview so modal overlays cleanly
+      setStep("preview");
       setDupModalOpen(true);
 
-      // Actually start uploading the clean records while user reviews duplicates
       if (gathered.cleanPlans.length > 0) {
         _runUpload(gathered.cleanPlans);
       }
       return;
     }
 
-    // 4. No duplicates — upload everything
     await _runUpload(active);
   };
 
-  // ── Core upload runner (used both directly and after dedup review) ─────────
+  // ── Core upload runner ─────────────────────────────────────────────────────
   const _runUpload = async (activePlan) => {
     const total = activePlan.reduce((s, p) => s + p.rows.length, 0);
     if (total === 0) return;
@@ -250,33 +222,19 @@ preflightResults.forEach((result, i) => {
         const batch = batches[bi];
         const firstRecord = batch[0]?.centreName || batch[0]?.name || `Batch ${bi + 1}`;
 
-        setUpState((prev) => ({
-          ...prev,
-          catLabel: p.catLabel,
-          record:   firstRecord,
-        }));
+        setUpState((prev) => ({ ...prev, catLabel: p.catLabel, record: firstRecord }));
 
-        const { success, failed, errors: batchErrors } = await uploadBatch(
-          p.endpoint,
-          batch,
-          p.fields
-        );
+        const { success, failed, errors: batchErrors } = await uploadBatch(p.endpoint, batch, p.fields);
 
         catSuccess += success;
         catFailed  += failed;
 
         if (batchErrors.length) {
-          allFails.push(
-            ...batchErrors.map((e) => ({ category: p.catLabel, ...e }))
-          );
+          allFails.push(...batchErrors.map((e) => ({ category: p.catLabel, ...e })));
         }
 
         done += batch.length;
-        setUpState((prev) => ({
-          ...prev,
-          done,
-          pct: Math.round((done / total) * 100),
-        }));
+        setUpState((prev) => ({ ...prev, done, pct: Math.round((done / total) * 100) }));
       }
 
       console.log(`[Import] "${p.catLabel}" done — ✓ ${catSuccess} succeeded, ✗ ${catFailed} failed`);
@@ -286,7 +244,6 @@ preflightResults.forEach((result, i) => {
     }
 
     setResults((prev) => {
-      // Merge with any existing results (e.g. from force-insert pass)
       const merged = [...prev];
       for (const f of finals) {
         const existing = merged.find((r) => r.catLabel === f.catLabel);
@@ -310,12 +267,8 @@ preflightResults.forEach((result, i) => {
     if (tf > 0) toast.error(`${tf} records failed — see details below.`);
   };
 
-  // ── After user reviews duplicates ───────────────────────────────────────────
   const handleDupDone = (forceInsertedCount) => {
     setDupModalOpen(false);
-    // If clean records are still uploading, step is already "uploading".
-    // If upload finished already, show done screen.
-    // Toast was already shown inside DuplicateReviewModal.
     if (forceInsertedCount > 0) onUploaded();
   };
 
@@ -324,14 +277,14 @@ preflightResults.forEach((result, i) => {
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
         <div
-          className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+          className="absolute inset-0 bg-black/40 backdrop-blur-sm"
           onClick={step !== "uploading" && step !== "checking" ? onClose : undefined}
         />
-        <div className="relative w-full max-w-xl bg-[#13131f] border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="relative w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
 
           {/* Modal header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-            <h3 className="text-white font-bold text-sm flex items-center gap-2">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h3 className="text-slate-900 font-bold text-sm flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="#6366f1" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
               </svg>
@@ -340,7 +293,7 @@ preflightResults.forEach((result, i) => {
             {step !== "uploading" && step !== "checking" && (
               <button
                 onClick={onClose}
-                className="text-slate-600 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -349,12 +302,12 @@ preflightResults.forEach((result, i) => {
             )}
           </div>
 
-          <div className="px-6 py-5">
+          <div className="px-6 py-5 bg-slate-50">
 
             {/* ── STEP: choose ──────────────────────────────────────────────── */}
             {step === "choose" && (
               <div className="space-y-4">
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-500 text-sm">
                   Upload an Excel or CSV file. All sheets are auto-detected and categorised.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -365,11 +318,11 @@ preflightResults.forEach((result, i) => {
                     <button
                       key={opt.l}
                       onClick={() => fileRef.current?.click()}
-                      className="flex flex-col items-center gap-2 p-5 rounded-xl border border-slate-700/50 hover:border-indigo-500/40 bg-slate-800/30 hover:bg-slate-800/60 transition-all text-center"
+                      className="flex flex-col items-center gap-2 p-5 rounded-xl border border-slate-200 hover:border-indigo-300 bg-white hover:bg-indigo-50/50 transition-all text-center shadow-sm"
                     >
                       <span className="text-3xl">{opt.i}</span>
-                      <span className="text-white text-sm font-semibold">{opt.l}</span>
-                      <span className="text-slate-600 text-xs">{opt.d}</span>
+                      <span className="text-slate-800 text-sm font-semibold">{opt.l}</span>
+                      <span className="text-slate-400 text-xs">{opt.d}</span>
                     </button>
                   ))}
                 </div>
@@ -380,8 +333,8 @@ preflightResults.forEach((result, i) => {
                   className="hidden"
                   onChange={handleFile}
                 />
-                <div className="bg-slate-800/30 rounded-xl p-3 border border-slate-700/30">
-                  <p className="text-slate-600 text-xs font-semibold uppercase tracking-wider mb-2">
+                <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-sm">
+                  <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
                     Auto-detects:
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -389,7 +342,7 @@ preflightResults.forEach((result, i) => {
                       <span
                         key={c.id}
                         className="text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={{ background: `${c.accent}15`, color: c.accent, border: `1px solid ${c.accent}25` }}
+                        style={{ background: `${c.accent}12`, color: c.accent, border: `1px solid ${c.accent}25` }}
                       >
                         {c.label}
                       </span>
@@ -403,19 +356,19 @@ preflightResults.forEach((result, i) => {
             {step === "preview" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-white font-semibold text-sm">Review Detected Data</p>
-                  <span className="text-slate-500 text-xs">{totalSel} records selected</span>
+                  <p className="text-slate-800 font-semibold text-sm">Review Detected Data</p>
+                  <span className="text-slate-400 text-xs">{totalSel} records selected</span>
                 </div>
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {plan.map((p, idx) => (
                     <div
                       key={p.catId}
-                      className="rounded-xl border overflow-hidden"
-                      style={{ borderColor: p.checked ? `${p.accent}30` : "#1e293b" }}
+                      className="rounded-xl border overflow-hidden shadow-sm"
+                      style={{ borderColor: p.checked ? `${p.accent}30` : "#e2e8f0" }}
                     >
                       <div
                         className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
-                        style={{ background: p.checked ? `${p.accent}08` : "#0f172a" }}
+                        style={{ background: p.checked ? `${p.accent}08` : "#fff" }}
                         onClick={() =>
                           setPlan((prev) =>
                             prev.map((x, i) => (i === idx ? { ...x, checked: !x.checked } : x))
@@ -426,7 +379,7 @@ preflightResults.forEach((result, i) => {
                           className="w-4 h-4 rounded flex items-center justify-center shrink-0"
                           style={{
                             background: p.checked ? p.accent : "transparent",
-                            border: `1.5px solid ${p.checked ? p.accent : "#475569"}`,
+                            border: `1.5px solid ${p.checked ? p.accent : "#cbd5e1"}`,
                           }}
                         >
                           {p.checked && (
@@ -437,34 +390,34 @@ preflightResults.forEach((result, i) => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-white text-sm font-semibold">{p.catLabel}</span>
+                            <span className="text-slate-800 text-sm font-semibold">{p.catLabel}</span>
                             <span
                               className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                              style={{ background: `${p.accent}20`, color: p.accent }}
+                              style={{ background: `${p.accent}15`, color: p.accent }}
                             >
                               {p.rows.length} records
                             </span>
                           </div>
-                          <p className="text-slate-700 text-xs truncate">
+                          <p className="text-slate-400 text-xs truncate">
                             from: {p.sheets.join(", ")}
                           </p>
                         </div>
                       </div>
 
                       {p.checked && (
-                        <div className="border-t border-slate-800/30 divide-y divide-slate-800/20">
+                        <div className="border-t border-slate-100 divide-y divide-slate-100">
                           {p.rows.slice(0, 3).map((r, ri) => (
-                            <div key={ri} className="px-4 py-1.5 flex gap-4 text-xs">
-                              <span className="text-white font-medium w-36 truncate shrink-0">
+                            <div key={ri} className="px-4 py-1.5 flex gap-4 text-xs bg-white">
+                              <span className="text-slate-700 font-medium w-36 truncate shrink-0">
                                 {r.centreName || r.name || "—"}
                               </span>
-                              <span className="text-slate-600 truncate">
+                              <span className="text-slate-400 truncate">
                                 {r.email || r.phone || "—"}
                               </span>
                             </div>
                           ))}
                           {p.rows.length > 3 && (
-                            <p className="px-4 py-1 text-xs text-slate-700">
+                            <p className="px-4 py-1 text-xs text-slate-400 bg-white">
                               +{p.rows.length - 3} more
                             </p>
                           )}
@@ -476,7 +429,7 @@ preflightResults.forEach((result, i) => {
                 <div className="flex gap-3 pt-1">
                   <button
                     onClick={() => setStep("choose")}
-                    className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all"
+                    className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-700 transition-all"
                   >
                     Back
                   </button>
@@ -486,7 +439,7 @@ preflightResults.forEach((result, i) => {
                     className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 transition-all hover:-translate-y-0.5"
                     style={{
                       background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
-                      boxShadow: "0 4px 15px rgba(99,102,241,0.2)",
+                      boxShadow: "0 4px 15px rgba(99,102,241,0.25)",
                     }}
                   >
                     Import {totalSel} Records
@@ -495,15 +448,15 @@ preflightResults.forEach((result, i) => {
               </div>
             )}
 
-            {/* ── STEP: checking (pre-flight) ───────────────────────────────── */}
+            {/* ── STEP: checking ────────────────────────────────────────────── */}
             {step === "checking" && (
               <div className="py-6 flex flex-col items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin" />
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
                 </div>
                 <div className="text-center">
-                  <p className="text-white font-bold text-sm">Checking for duplicates…</p>
-                  <p className="text-slate-600 text-xs mt-1">Scanning database before import</p>
+                  <p className="text-slate-800 font-bold text-sm">Checking for duplicates…</p>
+                  <p className="text-slate-400 text-xs mt-1">Scanning database before import</p>
                 </div>
               </div>
             )}
@@ -512,24 +465,24 @@ preflightResults.forEach((result, i) => {
             {step === "validation-error" && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#f87171" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                     </svg>
                   </div>
                   <div>
-                    <p className="text-white font-bold text-sm">Validation Errors</p>
-                    <p className="text-slate-500 text-xs">
+                    <p className="text-slate-800 font-bold text-sm">Validation Errors</p>
+                    <p className="text-slate-400 text-xs">
                       Please fix the following errors before uploading
                     </p>
                   </div>
                 </div>
-                <div className="bg-slate-800/40 rounded-xl border border-red-500/20 max-h-52 overflow-y-auto divide-y divide-slate-800/30">
+                <div className="bg-red-50 rounded-xl border border-red-200 max-h-52 overflow-y-auto divide-y divide-red-100">
                   {valErrors.map((e, i) => (
-                    <div key={i} className="px-4 py-2 text-xs text-red-400">{e}</div>
+                    <div key={i} className="px-4 py-2 text-xs text-red-500">{e}</div>
                   ))}
                   {valErrors.length >= 20 && (
-                    <div className="px-4 py-2 text-xs text-slate-600">
+                    <div className="px-4 py-2 text-xs text-slate-400">
                       … and more errors. Please review the full file.
                     </div>
                   )}
@@ -537,7 +490,7 @@ preflightResults.forEach((result, i) => {
                 <div className="flex gap-3">
                   <button
                     onClick={() => setStep("preview")}
-                    className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all"
+                    className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
                   >
                     Back to Preview
                   </button>
@@ -556,24 +509,24 @@ preflightResults.forEach((result, i) => {
             {step === "uploading" && (
               <div className="py-1 space-y-5">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
-                    <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin" />
+                  <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                    <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
                   </div>
                   <div>
-                    <p className="text-white font-bold text-sm">Importing data…</p>
-                    <p className="text-slate-600 text-xs mt-0.5">Do not close this window</p>
+                    <p className="text-slate-800 font-bold text-sm">Importing data…</p>
+                    <p className="text-slate-400 text-xs mt-0.5">Do not close this window</p>
                   </div>
                 </div>
 
-                <div className="bg-slate-800/40 rounded-xl px-4 py-3 space-y-2 border border-slate-800">
+                <div className="bg-white rounded-xl px-4 py-3 space-y-2 border border-slate-200 shadow-sm">
                   {[
                     ["Category", upState.catLabel, false],
                     ["Record",   upState.record,   true ],
                     ["Progress", `${upState.done} / ${upState.total}`, false],
                   ].map(([l, v, trunc]) => (
                     <div key={l} className="flex items-center justify-between text-xs">
-                      <span className="text-slate-600 font-semibold uppercase tracking-wide">{l}</span>
-                      <span className={`text-white font-medium ${trunc ? "truncate max-w-[200px]" : ""}`}>
+                      <span className="text-slate-400 font-semibold uppercase tracking-wide">{l}</span>
+                      <span className={`text-slate-800 font-medium ${trunc ? "truncate max-w-[200px]" : ""}`}>
                         {v || "—"}
                       </span>
                     </div>
@@ -582,10 +535,10 @@ preflightResults.forEach((result, i) => {
 
                 <div>
                   <div className="flex justify-between text-xs mb-2">
-                    <span className="text-slate-600">Upload progress</span>
-                    <span className="text-white font-bold">{upState.pct}%</span>
+                    <span className="text-slate-400">Upload progress</span>
+                    <span className="text-slate-800 font-bold">{upState.pct}%</span>
                   </div>
-                  <div className="bg-slate-800/60 rounded-full h-3 overflow-hidden border border-slate-700/30">
+                  <div className="bg-slate-200 rounded-full h-3 overflow-hidden">
                     <div
                       className="h-full rounded-full relative overflow-hidden transition-all duration-300"
                       style={{
@@ -593,7 +546,7 @@ preflightResults.forEach((result, i) => {
                         background: "linear-gradient(90deg,#6366f1,#8b5cf6,#06b6d4)",
                       }}
                     >
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
                     </div>
                   </div>
                 </div>
@@ -606,15 +559,15 @@ preflightResults.forEach((result, i) => {
                         key={p.catId}
                         className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all"
                         style={{
-                          background: isCur ? `${p.accent}10` : "transparent",
-                          border:     `1px solid ${isCur ? p.accent + "20" : "transparent"}`,
+                          background: isCur ? `${p.accent}08` : "#f8fafc",
+                          border:     `1px solid ${isCur ? p.accent + "25" : "#e2e8f0"}`,
                         }}
                       >
-                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: isCur ? p.accent : "#374151" }} />
-                        <span className="text-sm font-medium" style={{ color: isCur ? p.accent : "#4b5563" }}>
+                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: isCur ? p.accent : "#cbd5e1" }} />
+                        <span className="text-sm font-medium" style={{ color: isCur ? p.accent : "#94a3b8" }}>
                           {p.catLabel}
                         </span>
-                        <span className="text-xs ml-auto" style={{ color: isCur ? p.accent : "#374151" }}>
+                        <span className="text-xs ml-auto" style={{ color: isCur ? p.accent : "#94a3b8" }}>
                           {p.rows.length} records
                         </span>
                         {isCur && (
@@ -634,13 +587,13 @@ preflightResults.forEach((result, i) => {
             {step === "done" && (
               <div className="py-1 space-y-4">
                 <div className="text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-3">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto mb-3">
                     <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="#10b981" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                   </div>
-                  <p className="text-white font-bold text-lg">Import Complete!</p>
-                  <p className="text-slate-600 text-xs mt-1">
+                  <p className="text-slate-800 font-bold text-lg">Import Complete!</p>
+                  <p className="text-slate-400 text-xs mt-1">
                     {results.reduce((s, r) => s + r.success, 0)} records added successfully
                   </p>
                 </div>
@@ -649,12 +602,12 @@ preflightResults.forEach((result, i) => {
                   {results.map((r) => (
                     <div
                       key={r.catLabel}
-                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/30"
+                      className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm"
                     >
-                      <span className="text-white text-sm font-medium">{r.catLabel}</span>
+                      <span className="text-slate-700 text-sm font-medium">{r.catLabel}</span>
                       <div className="flex items-center gap-3 text-xs font-semibold">
-                        {r.success > 0 && <span className="text-emerald-400">✓ {r.success} added</span>}
-                        {r.failed  > 0 && <span className="text-red-400">✗ {r.failed} failed</span>}
+                        {r.success > 0 && <span className="text-emerald-600">✓ {r.success} added</span>}
+                        {r.failed  > 0 && <span className="text-red-500">✗ {r.failed} failed</span>}
                       </div>
                     </div>
                   ))}
@@ -662,24 +615,24 @@ preflightResults.forEach((result, i) => {
 
                 {failLog.length > 0 && (
                   <details className="group">
-                    <summary className="text-xs text-red-400 cursor-pointer select-none flex items-center gap-1.5 py-1">
+                    <summary className="text-xs text-red-500 cursor-pointer select-none flex items-center gap-1.5 py-1">
                       <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
                         className="transition-transform group-open:rotate-90">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
                       </svg>
                       Show {failLog.length} failure detail{failLog.length > 1 ? "s" : ""}
-                      <span className="text-slate-600 ml-1">(also visible in browser console)</span>
+                      <span className="text-slate-400 ml-1">(also visible in browser console)</span>
                     </summary>
-                    <div className="mt-2 bg-slate-800/40 rounded-xl border border-red-500/20 max-h-40 overflow-y-auto divide-y divide-slate-800/30">
+                    <div className="mt-2 bg-red-50 rounded-xl border border-red-200 max-h-40 overflow-y-auto divide-y divide-red-100">
                       {failLog.map((f, i) => (
                         <div key={i} className="px-3 py-2 text-xs">
-                          <span className="text-red-400 font-semibold">{f.category}</span>
-                          <span className="text-slate-500 mx-1">·</span>
-                          <span className="text-slate-400">{f.row?.centreName || f.row?.name || `Row ${f.rowIndex + 1}`}</span>
-                          <span className="text-slate-500 mx-1">—</span>
-                          <span className="text-red-300">{f.message}</span>
+                          <span className="text-red-500 font-semibold">{f.category}</span>
+                          <span className="text-slate-400 mx-1">·</span>
+                          <span className="text-slate-600">{f.row?.centreName || f.row?.name || `Row ${f.rowIndex + 1}`}</span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span className="text-red-400">{f.message}</span>
                           {f.status && (
-                            <span className="ml-1 text-slate-600">[HTTP {f.status}]</span>
+                            <span className="ml-1 text-slate-400">[HTTP {f.status}]</span>
                           )}
                         </div>
                       ))}
@@ -701,7 +654,7 @@ preflightResults.forEach((result, i) => {
         </div>
       </div>
 
-      {/* ── Duplicate Review Modal (overlaid on top) ─────────────────────────── */}
+      {/* ── Duplicate Review Modal ─────────────────────────────────────────── */}
       <DuplicateReviewModal
         isOpen={dupModalOpen}
         onClose={() => setDupModalOpen(false)}
