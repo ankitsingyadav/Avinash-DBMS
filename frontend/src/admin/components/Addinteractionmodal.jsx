@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import axios from "../../utils/axios.js";
 import toast from "react-hot-toast";
 import { inputCls } from "./ui.jsx";
+import useAuthStore from "../../context/authStore";
 
 const INTERACTION_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
 
@@ -21,19 +22,37 @@ const EMPTY_FORM = {
   notes:               "",
   ninAin:              "",
   nextInteractionDate: "",
-  nextNotes:           "",   // ── ADDED
+  nextNotes:           "",
 };
 
 export default function AddInteractionModal({ isOpen, onClose, record, category, onSaved }) {
+  const { user } = useAuthStore();
   const [form,    setForm]    = useState(EMPTY_FORM);
   const [errors,  setErrors]  = useState({});
   const [loading, setLoading] = useState(false);
 
+  // NEW: toggles "Interacted With" between dropdown-of-contacts and free text
+  const [interactedWithCustom, setInteractedWithCustom] = useState(false);
+
+  // NEW: contact names pulled from this organisation's saved contacts
+  const contactNameOptions = (record?.contacts || [])
+    .map((c, idx) => ({ idx, name: (c?.name || "").trim() }))
+    .filter((c) => c.name.length > 0);
+
   useEffect(() => {
     if (isOpen) {
-      setForm(EMPTY_FORM);
+      // Pre-fill Interaction By + AIN/NIN from logged-in user, rest stays empty.
+      // Both remain fully editable — this only sets the initial value.
+      setForm({
+        ...EMPTY_FORM,
+        interactionBy: user?.fullName || "",
+        ninAin:        user?.ninAinNumber || "",
+      });
       setErrors({});
+      // Default to dropdown mode if this org has saved contacts, else custom text
+      setInteractedWithCustom(contactNameOptions.length === 0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, record?._id]);
 
   if (!isOpen || !record) return null;
@@ -71,7 +90,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
       if (form.notes.trim())        payload.notes               = form.notes.trim();
       if (form.ninAin.trim())       payload.ninAin              = form.ninAin.trim();
       if (form.nextInteractionDate) payload.nextInteractionDate = form.nextInteractionDate;
-      if (form.nextNotes.trim())    payload.nextNotes           = form.nextNotes.trim(); // ── ADDED
+      if (form.nextNotes.trim())    payload.nextNotes           = form.nextNotes.trim();
 
       await axios.post(`${category.endpoint}/${record._id}/interactions`, payload);
       toast.success("Interaction recorded successfully!");
@@ -149,17 +168,63 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                 {errors.interactionBy && <p className="text-red-500 text-xs">{errors.interactionBy}</p>}
               </div>
 
+              {/* Interacted With — dropdown sourced from record.contacts,
+                  with a Custom option that switches to free text */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Interacted With <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={form.interactedWith}
-                  onChange={(e) => set("interactedWith", e.target.value)}
-                  placeholder="Contact person name"
-                  className={inputCls(!!errors.interactedWith)}
-                />
+
+                {interactedWithCustom ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={form.interactedWith}
+                      onChange={(e) => set("interactedWith", e.target.value)}
+                      placeholder="Contact person name"
+                      className={inputCls(!!errors.interactedWith)}
+                      autoFocus
+                    />
+                    {contactNameOptions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInteractedWithCustom(false);
+                          set("interactedWith", "");
+                        }}
+                        className="shrink-0 px-3 rounded-lg border border-slate-300 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"
+                        title="Choose from contact list instead"
+                      >
+                        ↩ List
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <select
+                    value={form.interactedWith}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setInteractedWithCustom(true);
+                        set("interactedWith", "");
+                      } else {
+                        set("interactedWith", e.target.value);
+                      }
+                    }}
+                    className={inputCls(!!errors.interactedWith)}
+                  >
+                    <option value="">
+                      {contactNameOptions.length > 0
+                        ? "Select Contact Person"
+                        : "No saved contacts"}
+                    </option>
+                    {contactNameOptions.map(({ idx, name }) => (
+                      <option key={idx} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                    <option value="__custom__">+ Custom (type manually)</option>
+                  </select>
+                )}
                 {errors.interactedWith && <p className="text-red-500 text-xs">{errors.interactedWith}</p>}
               </div>
 
@@ -256,7 +321,6 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                 )}
               </div>
 
-              {/* ── nextNotes — ADDED ── */}
               <div className="sm:col-span-2 space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</label>
                 <textarea

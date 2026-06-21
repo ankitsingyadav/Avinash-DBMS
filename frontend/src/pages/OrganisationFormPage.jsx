@@ -1,16 +1,10 @@
 // OrganisationFormPage.jsx — Light Theme (White / Light Blue / Black)
-// CHANGES:
-//   1. handleConfirm: 409 duplicate errors shown with a dedicated toast style
-//      that includes the server's descriptive message
-//   2. LocationSelector wrapper: overrides any grey/disabled styling so all
-//      fields render on white with full contrast — done via a scoped CSS block
-//      injected once at mount (no external deps, no className hacks on child)
-//   3. lightInput helper unchanged — still used for all non-LocationSelector fields
-//   4. NEW: "Next Interaction Planned" now has its own independent Notes field
-//      (interaction.nextNotes) — separate from the current interaction's notes
-//   5. NEW: "Centre Onboarded By" and "AIN / NIN Number" (Additional Details)
-//      auto-populate from the logged-in user (fullName / ninAinNumber) on mount,
-//      but remain fully editable
+// CHANGES (latest):
+//   6. NEW: "Interaction By" now auto-populates from logged-in user (fullName)
+//      on mount — same pattern as onboardedBy — but stays fully editable
+//   7. NEW: "Interacted With" is now a dropdown sourced live from the contact
+//      persons added in Section 2 (by name), with a "+ Custom" option that
+//      switches to a free-text input when no matching contact exists
 
 import React, { useState, useCallback, useEffect } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
@@ -236,7 +230,6 @@ function DuplicateBanner({ message, onDismiss }) {
       role="alert"
       className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-800 shadow-sm"
     >
-      {/* Icon */}
       <span className="mt-0.5 shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-red-100">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
@@ -261,9 +254,6 @@ function DuplicateBanner({ message, onDismiss }) {
 }
 
 // ─── CSS injection: force LocationSelector inputs to white ───────────────────
-// LocationSelector renders its own inputs internally. We inject a scoped
-// <style> tag that targets the wrapper ID and overrides any grey/disabled-
-// looking background without touching the component's own JSX.
 const LOCATION_STYLE_ID = "org-form-location-overrides";
 
 function injectLocationStyles() {
@@ -271,27 +261,24 @@ function injectLocationStyles() {
   const style = document.createElement("style");
   style.id = LOCATION_STYLE_ID;
   style.textContent = `
-    /* Force all inputs/selects inside the LocationSelector wrapper to white */
     #org-location-wrapper input,
     #org-location-wrapper select,
     #org-location-wrapper textarea {
       background-color: #ffffff !important;
-      color: #1e293b !important;          /* slate-800 */
+      color: #1e293b !important;
       opacity: 1 !important;
       -webkit-text-fill-color: #1e293b !important;
     }
-    /* Remove the greyed-out disabled look even when field is not yet editable */
     #org-location-wrapper input:disabled,
     #org-location-wrapper select:disabled {
-      background-color: #f8fafc !important; /* slate-50, very subtle tint */
-      color: #64748b !important;            /* slate-500 */
+      background-color: #f8fafc !important;
+      color: #64748b !important;
       -webkit-text-fill-color: #64748b !important;
       cursor: default;
     }
-    /* Placeholder contrast */
     #org-location-wrapper input::placeholder,
     #org-location-wrapper select::placeholder {
-      color: #94a3b8 !important; /* slate-400 */
+      color: #94a3b8 !important;
     }
   `;
   document.head.appendChild(style);
@@ -304,14 +291,14 @@ const OrganisationFormPage = () => {
   const [loading,           setLoading]           = useState(false);
   const [showConfirm,       setShowConfirm]       = useState(false);
   const [formData,          setFormData]          = useState(null);
-  // Stores the 409 duplicate message for the inline banner
   const [duplicateMsg,      setDuplicateMsg]      = useState("");
 
-  // Inject location field overrides once on mount
+  // NEW: toggles "Interacted With" between dropdown-of-contacts and free text
+  const [interactedWithCustom, setInteractedWithCustom] = useState(false);
+
   useEffect(() => {
     injectLocationStyles();
     return () => {
-      // Clean up on unmount to avoid leaking styles if component is hot-reloaded
       document.getElementById(LOCATION_STYLE_ID)?.remove();
     };
   }, []);
@@ -332,16 +319,17 @@ const OrganisationFormPage = () => {
     reValidateMode: "onChange",
   });
 
-  // ── Default "Onboarded By" / "AIN / NIN Number" from the logged-in user ────
-  // Runs once user data is available. Both fields remain fully editable —
-  // we only set the *initial* value here, register() handles the rest.
-  useEffect(() => {
+  // ── Default "Onboarded By" / "AIN-NIN" / "Interaction By" from logged-in user
+  // All three remain fully editable — only the *initial* value is set here.
+   useEffect(() => {
     if (!user) return;
     if (user.fullName) {
       setValue("onboardedBy", user.fullName, { shouldValidate: false, shouldDirty: false });
+      setValue("interaction.interactionBy", user.fullName, { shouldValidate: false, shouldDirty: false });
     }
     if (user.ninAinNumber) {
       setValue("ninAin", user.ninAinNumber, { shouldValidate: false, shouldDirty: false });
+      setValue("interaction.ninAin", user.ninAinNumber, { shouldValidate: false, shouldDirty: false });
     }
   }, [user, setValue]);
 
@@ -350,6 +338,13 @@ const OrganisationFormPage = () => {
 
   const selectedCentreType  = watch("centreType");
   const designationOptions  = DESIGNATION_MAP[selectedCentreType] ?? [];
+
+  // NEW: live list of contact names typed in Section 2, for the
+  // "Interacted With" dropdown. Empty names are filtered out.
+  const contactsWatch = watch("contacts") || [];
+  const contactNameOptions = contactsWatch
+    .map((c, idx) => ({ idx, name: (c?.name || "").trim() }))
+    .filter((c) => c.name.length > 0);
 
   const handleCentreTypeChange = useCallback(
     (value) => {
@@ -362,7 +357,6 @@ const OrganisationFormPage = () => {
   );
 
   const onSubmit = useCallback((data) => {
-    // Clear any previous duplicate banner when user re-submits
     setDuplicateMsg("");
     setFormData(data);
     setShowConfirm(true);
@@ -382,7 +376,6 @@ const OrganisationFormPage = () => {
         "Failed to register organisation. Please try again.";
 
       if (status === 409) {
-        // Duplicate: show inline banner + a toast for immediate visibility
         setDuplicateMsg(message);
         toast.error("Duplicate record — organisation already exists.", {
           duration: 5000,
@@ -410,11 +403,9 @@ const OrganisationFormPage = () => {
         message={`Register "${formData?.centreName}"? This will create a permanent record.`}
       />
 
-      {/* Top accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-blue-400 to-sky-300" />
 
       <div className="max-w-4xl mx-auto px-5 py-10">
-        {/* Breadcrumb */}
         <nav
           className="flex items-center gap-2 text-xs text-slate-400 mb-8"
           aria-label="Breadcrumb"
@@ -439,7 +430,6 @@ const OrganisationFormPage = () => {
           </span>
         </nav>
 
-        {/* Page Header */}
         <div className="flex items-start gap-4 mb-6">
           <div
             className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-200"
@@ -464,7 +454,6 @@ const OrganisationFormPage = () => {
           </div>
         </div>
 
-        {/* ── Duplicate inline banner ──────────────────────────────────────── */}
         {duplicateMsg && (
           <div className="mb-6">
             <DuplicateBanner
@@ -485,7 +474,6 @@ const OrganisationFormPage = () => {
             <SectionHeader color="blue" title="Centre Information" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Institution Type */}
               <FormField
                 label="Institution Type *"
                 error={errors.centreType?.message}
@@ -513,7 +501,6 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              {/* Institution Name */}
               <FormField
                 label="Institution Name *"
                 error={errors.centreName?.message}
@@ -527,7 +514,6 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
-              {/* Website */}
               <FormField
                 label="Website (Optional)"
                 error={errors.website?.message}
@@ -543,7 +529,6 @@ const OrganisationFormPage = () => {
               </FormField>
             </div>
 
-            {/* ── Location ── white inputs enforced via #org-location-wrapper */}
             <div
               id="org-location-wrapper"
               className="mt-6 pt-6 border-t border-slate-100"
@@ -559,7 +544,6 @@ const OrganisationFormPage = () => {
               />
             </div>
 
-            {/* Street Address */}
             <div className="mt-6 pt-6 border-t border-slate-100">
               <FormField
                 label="Street Details *"
@@ -736,6 +720,7 @@ const OrganisationFormPage = () => {
               Current Interaction
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Interaction By — auto-filled from logged-in user, editable */}
               <FormField
                 label="Interaction By *"
                 error={errors.interaction?.interactionBy?.message}
@@ -748,16 +733,70 @@ const OrganisationFormPage = () => {
                 />
               </FormField>
 
+              {/* Interacted With — dropdown sourced from Section 2 contacts,
+                  with a Custom option that switches to free text */}
               <FormField
                 label="Interacted With *"
                 error={errors.interaction?.interactedWith?.message}
               >
-                <input
-                  {...register("interaction.interactedWith")}
-                  placeholder="Name of contact person at org"
-                  className={lightInput(!!errors.interaction?.interactedWith)}
-                  aria-required="true"
-                />
+                {interactedWithCustom ? (
+                  <div className="flex gap-2">
+                    <input
+                      {...register("interaction.interactedWith")}
+                      placeholder="Type contact person's name"
+                      className={lightInput(!!errors.interaction?.interactedWith)}
+                      aria-required="true"
+                      autoFocus
+                    />
+                    {contactNameOptions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInteractedWithCustom(false);
+                          setValue("interaction.interactedWith", "", {
+                            shouldValidate: false,
+                          });
+                        }}
+                        className="shrink-0 px-3 rounded-xl border border-slate-300 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-colors shadow-sm"
+                        title="Choose from contact list instead"
+                      >
+                        ↩ List
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <Controller
+                    name="interaction.interactedWith"
+                    control={control}
+                    render={({ field }) => (
+                      <select
+                        {...field}
+                        onChange={(e) => {
+                          if (e.target.value === "__custom__") {
+                            setInteractedWithCustom(true);
+                            field.onChange("");
+                          } else {
+                            field.onChange(e.target.value);
+                          }
+                        }}
+                        className={lightInput(!!errors.interaction?.interactedWith)}
+                        aria-required="true"
+                      >
+                        <option value="">
+                          {contactNameOptions.length > 0
+                            ? "Select Contact Person"
+                            : "Add a contact person above first"}
+                        </option>
+                        {contactNameOptions.map(({ idx, name }) => (
+                          <option key={idx} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                        <option value="__custom__">+ Custom (type manually)</option>
+                      </select>
+                    )}
+                  />
+                )}
               </FormField>
 
               <FormField
@@ -798,7 +837,6 @@ const OrganisationFormPage = () => {
               </FormField>
             </div>
 
-            {/* Divider */}
             <div className="my-6 border-t border-slate-200 relative">
               <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 Next Interaction
@@ -837,7 +875,6 @@ const OrganisationFormPage = () => {
                 </select>
               </FormField>
 
-              {/* NEW: independent notes field for the next planned interaction */}
               <FormField
                 label="Notes"
                 error={errors.interaction?.nextNotes?.message}

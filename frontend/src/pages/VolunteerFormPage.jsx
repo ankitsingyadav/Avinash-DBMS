@@ -1,5 +1,5 @@
 // VolunteerFormPage.jsx — Light Theme (White / Light Blue / Black)
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "../utils/axios.js";
 import toast from "react-hot-toast";
@@ -71,6 +71,41 @@ function SectionLabel({ children }) {
   );
 }
 
+// ─── CSS injection: force LocationSelector inputs to white/readable ──────────
+// Same fix as OrganisationFormPage — LocationSelector renders its own inputs
+// internally with a grey/disabled look. We override that via a scoped
+// <style> tag targeting this page's wrapper ID, without touching the
+// component's own JSX.
+const LOCATION_STYLE_ID = "volunteer-form-location-overrides";
+
+function injectLocationStyles() {
+  if (document.getElementById(LOCATION_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = LOCATION_STYLE_ID;
+  style.textContent = `
+    #volunteer-location-wrapper input,
+    #volunteer-location-wrapper select,
+    #volunteer-location-wrapper textarea {
+      background-color: #ffffff !important;
+      color: #1e293b !important;          /* slate-800 */
+      opacity: 1 !important;
+      -webkit-text-fill-color: #1e293b !important;
+    }
+    #volunteer-location-wrapper input:disabled,
+    #volunteer-location-wrapper select:disabled {
+      background-color: #f8fafc !important; /* slate-50, very subtle tint */
+      color: #64748b !important;            /* slate-500 */
+      -webkit-text-fill-color: #64748b !important;
+      cursor: default;
+    }
+    #volunteer-location-wrapper input::placeholder,
+    #volunteer-location-wrapper select::placeholder {
+      color: #94a3b8 !important; /* slate-400 */
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function VolunteerFormPage() {
   const [form,          setForm]          = useState(INITIAL);
@@ -80,6 +115,14 @@ export default function VolunteerFormPage() {
   const [loading,       setLoading]       = useState(false);
   const [submitted,     setSubmitted]     = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
+
+  // Inject location field overrides once on mount
+  useEffect(() => {
+    injectLocationStyles();
+    return () => {
+      document.getElementById(LOCATION_STYLE_ID)?.remove();
+    };
+  }, []);
 
   const set = (key, val) => {
     setForm(p => ({ ...p, [key]: val }));
@@ -302,7 +345,7 @@ export default function VolunteerFormPage() {
             </div>
           </div>
 
-          {/* ── Location ── */}
+          {/* ── Location ── white inputs enforced via #volunteer-location-wrapper */}
           <div>
             <SectionLabel>Location</SectionLabel>
             <div className="mb-4">
@@ -316,15 +359,17 @@ export default function VolunteerFormPage() {
                 />
               </Field>
             </div>
-            <LocationSelector
-              mode="manual"
-              showPincode={false}
-              values={{ state: form.state, district: form.district, city: form.city }}
-              onChange={(key, val) => set(key, val)}
-              onBlur={(key) => blur(key)}
-              errors={errors}
-              touched={touched}
-            />
+            <div id="volunteer-location-wrapper">
+              <LocationSelector
+                mode="manual"
+                showPincode={false}
+                values={{ state: form.state, district: form.district, city: form.city }}
+                onChange={(key, val) => set(key, val)}
+                onBlur={(key) => blur(key)}
+                errors={errors}
+                touched={touched}
+              />
+            </div>
           </div>
 
           {/* ── Follow-up ── */}
