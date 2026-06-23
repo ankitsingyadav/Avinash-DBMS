@@ -20,7 +20,7 @@ const footerData = {
   ],
   support: [
     { title: "Terms of Use", desc: "Legal terms aur conditions." },
-    { title: "Privacy Statements", desc: "Hum aapka data kaise handle karte hain." },
+    { title: "Privacy Statement", desc: "Hum aapka data kaise handle karte hain." },
     { title: "Cookie Policy", desc: "Cookies usage ke baare mein jaankari." },
   ],
 };
