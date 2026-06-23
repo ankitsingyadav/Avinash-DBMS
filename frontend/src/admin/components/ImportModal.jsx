@@ -290,8 +290,9 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
       for (const f of finals) {
         const existing = merged.find((r) => r.catLabel === f.catLabel);
         if (existing) {
-          existing.success += f.success;
-          existing.failed  += f.failed;
+          existing.success  += f.success;
+          existing.failed   += f.failed;
+          existing.skipped   = (existing.skipped ?? 0) + (f.skipped ?? 0);
         } else {
           merged.push(f);
         }

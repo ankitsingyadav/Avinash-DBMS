@@ -286,26 +286,42 @@ export function parseWorkbook(wb) {
 }
 
 
+// Returns { cleanPlan, skipped }
+// cleanPlan — active plan with invalid rows removed so upload can proceed
+// skipped   — list of { catLabel, rowNum, reasons } for the summary panel
 export function validatePlan(active) {
-  const errors = [];
-  active.forEach((p) => {
-    p.rows.forEach((row, i) => {
-      const rowNum = i + 1;
-      p.requiredFields.forEach((f) => {
-        if (f === "contacts") {
-          const hasIdentifier = row.name || row.centreName || row.contactPerson;
-          if (!hasIdentifier)
-            errors.push(`${p.catLabel} — Row ${rowNum}: needs at least a name or contact person`);
-          return;
+  const skipped   = [];
+  const cleanPlan = active
+    .map((p) => {
+      const validRows = [];
+
+      p.rows.forEach((row, i) => {
+        const rowNum  = i + 1;
+        const reasons = [];
+
+        p.requiredFields.forEach((f) => {
+          if (f === "contacts") {
+            const hasIdentifier = row.name || row.centreName || row.contactPerson;
+            if (!hasIdentifier) reasons.push("needs at least a name or contact person");
+            return;
+          }
+          if (f.startsWith("interaction.") || f === "ninAin") return;
+
+          const val = row[f];
+          if (!val || String(val).trim() === "")
+            reasons.push(`"${f}" is required but missing`);
+        });
+
+        if (reasons.length === 0) {
+          validRows.push(row);
+        } else {
+          skipped.push({ catLabel: p.catLabel, rowNum, reasons });
         }
-        if (f.startsWith("interaction.")) return;
-        if (f === "ninAin") return; // controller handles fallback ← YE LINE ADD KARO
-        
-        const val = row[f];
-        if (!val || String(val).trim() === "")
-          errors.push(`${p.catLabel} — Row ${rowNum}: "${f}" is required but missing`);
       });
-    });
-  });
-  return errors;
+
+      return { ...p, rows: validRows };
+    })
+    .filter((p) => p.rows.length > 0);
+
+  return { cleanPlan, skipped };
 }
