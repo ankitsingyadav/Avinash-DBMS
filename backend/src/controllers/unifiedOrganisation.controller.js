@@ -572,12 +572,19 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
     page  = 1, limit = 12,
     search, sortField, sortDir,
     status, state, district, city, centreType,
+    ids,       // comma-separated list of org IDs — used by the "upcoming 48h" admin filter
   } = req.query;
 
   const dataScope = req._dataScope || {};
   const dateScope = req._dateScope || {};
 
   const extraFilters = {};
+
+  // Direct ID filter — bypasses pagination when fetching specific orgs (e.g. upcoming filter)
+  if (ids) {
+    const idList = String(ids).split(",").map((s) => s.trim()).filter(Boolean);
+    if (idList.length > 0) extraFilters._id = { $in: idList };
+  }
 
   // partial_admin: restrict visible centreTypes to allowed modules
   if (req.user.role === "partial_admin") {

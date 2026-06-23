@@ -117,8 +117,8 @@ const STYLES = `
     cursor: pointer;
   }
   .np-cancel-btn:hover {
-    background: rgba(239,68,68,0.10) !important;
-    border-color: rgba(239,68,68,0.40) !important;
+    background: rgba(21,128,61,0.12) !important;
+    border-color: rgba(21,128,61,0.45) !important;
     transform: scale(1.04);
   }
 
@@ -161,7 +161,7 @@ const STYLES = `
   }
 `;
 
-// ── Cancel Modal ──────────────────────────────────────────────────────────────
+// ── Mark Done Modal ───────────────────────────────────────────────────────────
 function CancelModal({ item, onConfirm, onCancel, loading }) {
   const mode = MODE_META[item.interactionMode] || { icon: "📋", color: "#4f46e5" };
   return (
@@ -172,23 +172,23 @@ function CancelModal({ item, onConfirm, onCancel, loading }) {
     }}>
       <div style={{
         background: "#ffffff",
-        border: "1px solid #fca5a5",
+        border: "1px solid #a7f3d0",
         borderRadius: 22, padding: 32, maxWidth: 400, width: "100%",
         boxShadow: "0 32px 80px rgba(30,60,120,0.18)",
         animation: "np-fadeUp 0.22s ease",
       }}>
         <div style={{
           width: 54, height: 54, borderRadius: 16,
-          background: "#fff0f0", border: "1px solid #fca5a5",
+          background: "#f0fdf4", border: "1px solid #a7f3d0",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 24, marginBottom: 20,
-        }}>🗑️</div>
+        }}>✅</div>
 
         <p style={{ color: "#0f2a4a", fontSize: 18, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.03em" }}>
-          Cancel Interaction?
+          Mark as Done?
         </p>
         <p style={{ color: "#7a9ec0", fontSize: 13, margin: "0 0 22px", lineHeight: 1.65 }}>
-          The scheduled date will be cleared. All interaction history is preserved.
+          This marks the interaction as completed and removes it from upcoming notifications. All interaction history is preserved.
         </p>
 
         <div style={{
@@ -214,16 +214,16 @@ function CancelModal({ item, onConfirm, onCancel, loading }) {
               fontFamily: "'Syne', sans-serif", transition: "all 0.15s",
             }}
           >
-            Keep it
+            Not yet
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
             style={{
               flex: 1, padding: "12px", borderRadius: 12,
-              background: loading ? "#fff5f5" : "#fff0f0",
-              border: "1px solid #fca5a5",
-              color: "#dc2626", fontSize: 13, fontWeight: 700,
+              background: loading ? "#f0fdf4" : "#dcfce7",
+              border: "1px solid #a7f3d0",
+              color: "#15803d", fontSize: 13, fontWeight: 700,
               cursor: loading ? "not-allowed" : "pointer",
               opacity: loading ? 0.6 : 1,
               fontFamily: "'Syne', sans-serif",
@@ -235,12 +235,12 @@ function CancelModal({ item, onConfirm, onCancel, loading }) {
               <>
                 <span style={{
                   width: 13, height: 13,
-                  border: "2px solid rgba(220,38,38,0.25)", borderTopColor: "#dc2626",
+                  border: "2px solid rgba(21,128,61,0.25)", borderTopColor: "#15803d",
                   borderRadius: "50%", animation: "np-spin 0.7s linear infinite", display: "inline-block",
                 }} />
-                Cancelling…
+                Marking…
               </>
-            ) : "Cancel Interaction"}
+            ) : "Mark Done"}
           </button>
         </div>
       </div>
@@ -365,7 +365,7 @@ export default function Notificationspage() {
     return () => clearInterval(tickRef.current);
   }, []);
 
-  // ── Cancel — removes only the specific interaction, not the whole org ────────
+  // ── Mark Done — removes only the specific interaction from notifications ─────
   const handleCancelConfirm = async () => {
     if (!cancelTarget) return;
     setCancelling(true);
@@ -389,8 +389,9 @@ export default function Notificationspage() {
       await axios.post(`/organisations/${removedId}/interactions/cancel`, {
         interactionIndex: removedIndex,
       });
+      toast.success("Interaction marked as done.");
     } catch {
-      toast.error("Failed to cancel interaction. Please try again.");
+      toast.error("Could not mark as done. Please try again.");
       fetchData(true); // restore correct state from server
     }
   };
@@ -857,20 +858,20 @@ export default function Notificationspage() {
 
                       <button
                         onClick={(e) => { e.stopPropagation(); setCancelTarget(item); }}
-                        title="Cancel interaction"
+                        title="Mark interaction as done"
                         className="np-cancel-btn"
                         style={{
                           display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
-                          background: "#fff0f0", border: "1px solid #fca5a5",
-                          borderRadius: 9, padding: "6px 11px", color: "#dc2626",
+                          background: "#f0fdf4", border: "1px solid #a7f3d0",
+                          borderRadius: 9, padding: "6px 11px", color: "#15803d",
                           fontSize: 11, fontWeight: 700,
                           fontFamily: "'Syne', sans-serif",
                         }}
                       >
                         <svg width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
                         </svg>
-                        Cancel
+                        Mark Done
                       </button>
                     </div>
                   </div>

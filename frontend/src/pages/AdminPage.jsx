@@ -96,8 +96,9 @@ export default function AdminPage() {
   const [dateFrom,      setDateFrom]      = useState(initial.dateFrom);
   const [dateTo,        setDateTo]        = useState(initial.dateTo);
   const [highlightId,   setHighlightId]   = useState(initial.highlight);
-  const [upcomingFilter, setUpcomingFilter] = useState(initial.upcomingFilter);
-  const [upcomingData,   setUpcomingData]   = useState([]);
+  const [upcomingFilter,  setUpcomingFilter]  = useState(initial.upcomingFilter);
+  const [upcomingData,    setUpcomingData]    = useState([]);
+  const [upcomingOrgs,    setUpcomingOrgs]    = useState([]);
   const [upcomingLoading, setUpcomingLoading] = useState(false);
 
   const [editRecord,    setEditRecord]    = useState(null);
@@ -155,8 +156,21 @@ export default function AdminPage() {
       const res  = await axios.get("/organisations/upcoming-interactions");
       const list = res.data?.interactions || [];
       setUpcomingData(list);
+
+      // Fetch full org records for ALL upcoming IDs (not just the current page)
+      const uniqueIds = [...new Set(list.map((u) => String(u._id)))];
+      if (uniqueIds.length > 0) {
+        const orgRes = await axios.get(
+          `/organisations?ids=${uniqueIds.join(",")}&limit=500&page=1`
+        );
+        const payload = orgRes.data?.data ?? orgRes.data ?? {};
+        setUpcomingOrgs(payload.organisations || []);
+      } else {
+        setUpcomingOrgs([]);
+      }
     } catch {
       setUpcomingData([]);
+      setUpcomingOrgs([]);
     } finally {
       setUpcomingLoading(false);
     }
@@ -217,17 +231,14 @@ export default function AdminPage() {
     setPage(1);
   }, [category]);
 
-  const upcomingOrgIds = useMemo(
-    () => new Set(upcomingData.map((u) => String(u._id))),
-    [upcomingData]
-  );
-
+  // When upcoming filter is active, use the directly-fetched upcomingOrgs (all pages)
+  // instead of filtering the paginated data (which would miss orgs on other pages)
   const displayData  = upcomingFilter && activeTab === "organisation"
-    ? data.filter((r) => upcomingOrgIds.has(String(r._id)))
+    ? upcomingOrgs
     : data;
 
   const displayTotal = upcomingFilter && activeTab === "organisation"
-    ? displayData.length
+    ? upcomingOrgs.length
     : total;
 
   const getUpcomingSummary = () => {
