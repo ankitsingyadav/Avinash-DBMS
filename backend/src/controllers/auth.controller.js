@@ -21,12 +21,12 @@ import {
 
 // ─── Helper: Attach tokens to response ───────────────────────────────────────
 const sendTokenResponse = async (user, statusCode, res, message) => {
-  const accessToken = generateAccessToken(user._id, user.role);
+  const accessToken  = generateAccessToken(user._id, user.role);
   const refreshToken = generateRefreshToken(user._id);
 
-  // Save refresh token in DB
-  user.refreshToken = refreshToken;
-  user.lastLogin = new Date();
+  // Store only the hash — plaintext token lives in the cookie only
+  user.refreshToken = crypto.createHash("sha256").update(refreshToken).digest("hex");
+  user.lastLogin    = new Date();
   await user.save({ validateBeforeSave: false });
 
   // Set cookies
@@ -149,7 +149,7 @@ export const login = asyncHandler(async (req, res) => {
 
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
 export const logout = asyncHandler(async (req, res) => {
-  // Clear refresh token from DB
+  // Clear hashed refresh token from DB
   await User.findByIdAndUpdate(req.user._id, { refreshToken: null });
 
   // Clear cookies
@@ -176,10 +176,11 @@ export const refreshToken = asyncHandler(async (req, res) => {
     return sendError(res, 401, "No refresh token found. Please login again.");
   }
 
-  const decoded = verifyRefreshToken(token);
-  const user = await User.findById(decoded.id).select("+refreshToken");
+  const decoded    = verifyRefreshToken(token);
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+  const user        = await User.findById(decoded.id).select("+refreshToken");
 
-  if (!user || user.refreshToken !== token) {
+  if (!user || user.refreshToken !== hashedToken) {
     return sendError(res, 401, "Invalid refresh token. Please login again.");
   }
 
