@@ -94,6 +94,8 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
 
       await axios.post(`${category.endpoint}/${record._id}/interactions`, payload);
       toast.success("Interaction recorded successfully!");
+      // Notify notification bell + page to refresh immediately
+      window.dispatchEvent(new CustomEvent("interaction-saved"));
       onSaved?.();
       onClose();
     } catch (err) {

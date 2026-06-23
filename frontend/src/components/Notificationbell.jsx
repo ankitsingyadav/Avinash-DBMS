@@ -60,7 +60,15 @@ export default function NotificationBell({ canViewNotifications }) {
     return () => clearInterval(fetchRef.current);
   }, [fetchNotifications]);
 
-  // Countdown re-render every 60s
+  // Instant update: re-fetch when any interaction is saved anywhere in the app
+  useEffect(() => {
+    if (!canViewNotifications) return;
+    const handle = () => fetchNotifications();
+    window.addEventListener("interaction-saved", handle);
+    return () => window.removeEventListener("interaction-saved", handle);
+  }, [fetchNotifications, canViewNotifications]);
+
+  // Countdown re-render every 60s to keep time labels fresh
   useEffect(() => {
     intervalRef.current = setInterval(() => setNoti((n) => [...n]), 60 * 1000);
     return () => clearInterval(intervalRef.current);

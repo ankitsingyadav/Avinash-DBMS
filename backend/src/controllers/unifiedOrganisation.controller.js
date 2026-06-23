@@ -481,12 +481,22 @@ export const addInteraction = asyncHandler(async (req, res) => {
   if (!VALID_MODES.includes(interactionMode))
     return sendError(res, 422, `Invalid interactionMode. Must be one of: ${VALID_MODES.join(", ")}.`);
 
+  // Fetch the org first (needed for ownership check + auto-mark-done logic)
+  const org = await Organisation.findById(id);
+  if (!org) return sendError(res, 404, "Organisation not found.");
+
   // data_entry users may only edit their own records
-  if (req.user.role === "data_entry") {
-    const existing = await Organisation.findById(id).lean();
-    if (!existing) return sendError(res, 404, "Organisation not found.");
-    if (!verifyOwnRecord(existing, req.user._id))
-      return sendError(res, 403, "You can only edit records you created.");
+  if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id))
+    return sendError(res, 403, "You can only edit records you created.");
+
+  // Auto-mark previous interaction as done: clear nextInteractionDate on the
+  // last interaction so it disappears from the notifications bell/page.
+  const prevIdx = org.interactions.length - 1;
+  if (prevIdx >= 0 && org.interactions[prevIdx].nextInteractionDate) {
+    await Organisation.updateOne(
+      { _id: id },
+      { $unset: { [`interactions.${prevIdx}.nextInteractionDate`]: "" } }
+    );
   }
 
   const newEntry = buildInteractionFromBody(req.body);

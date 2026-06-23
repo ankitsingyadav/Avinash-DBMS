@@ -310,6 +310,7 @@ export default function AdminPage() {
   const handleInteractionSaved = () => {
     fetchData();
     if (upcomingFilter) fetchUpcomingData();
+    window.dispatchEvent(new CustomEvent("interaction-saved"));
   };
 
   const activeFiltersCount =

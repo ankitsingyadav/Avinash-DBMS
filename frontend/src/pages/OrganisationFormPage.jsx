@@ -367,6 +367,7 @@ const OrganisationFormPage = () => {
     try {
       await axios.post("/organisations", formData);
       toast.success("Organisation registered successfully!");
+      window.dispatchEvent(new CustomEvent("interaction-saved"));
       navigate("/organisation");
     } catch (err) {
       const status  = err?.response?.status;
