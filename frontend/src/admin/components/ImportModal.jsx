@@ -12,9 +12,27 @@ async function uploadBatch(endpoint, batch, fields) {
   const payloads = batch.map((r) => buildPayload(r, fields));
 
   try {
-    await axios.post(`${endpoint}/bulk`, { records: payloads });
-    return { success: batch.length, failed: 0, errors: [] };
+    const res  = await axios.post(`${endpoint}/bulk`, { records: payloads });
+    // Read actual inserted/failed counts from the response — never assume success = batch.length
+    const data = res.data?.data ?? res.data ?? {};
+    return {
+      success: data.inserted          ?? batch.length,
+      failed:  data.failed            ?? 0,
+      skipped: data.skippedDuplicates ?? 0,
+      errors:  [],
+    };
   } catch (bulkErr) {
+    // 207 Multi-Status = partial success (some inserted, some failed/skipped)
+    if (bulkErr?.response?.status === 207) {
+      const data = bulkErr.response.data ?? {};
+      return {
+        success: data.inserted          ?? 0,
+        failed:  data.failed            ?? 0,
+        skipped: data.skippedDuplicates ?? 0,
+        errors:  (data.errors ?? []).map((e) => ({ rowIndex: e.index, message: e.message })),
+      };
+    }
+
     const bulkMsg =
       bulkErr?.response?.data?.message ||
       bulkErr?.response?.data?.error   ||
@@ -25,6 +43,7 @@ async function uploadBatch(endpoint, batch, fields) {
     console.warn("[Import] Bulk error detail:", bulkErr?.response?.data);
   }
 
+  // Sequential fallback
   let success = 0;
   let failed  = 0;
   const errors = [];
@@ -57,7 +76,7 @@ async function uploadBatch(endpoint, batch, fields) {
     }
   }
 
-  return { success, failed, errors };
+  return { success, failed, skipped: 0, errors };
 }
 
 // ── Pre-flight duplicate check ────────────────────────────────────────────────
@@ -100,12 +119,13 @@ async function preflight(p) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ImportModal({ isOpen, onClose, onUploaded }) {
-  const [step,      setStep]      = useState("choose");
-  const [plan,      setPlan]      = useState([]);
-  const [upState,   setUpState]   = useState({ done: 0, total: 0, catLabel: "", record: "", pct: 0 });
-  const [results,   setResults]   = useState([]);
-  const [valErrors, setValErrors] = useState([]);
-  const [failLog,   setFailLog]   = useState([]);
+  const [step,        setStep]      = useState("choose");
+  const [plan,        setPlan]      = useState([]);
+  const [upState,     setUpState]   = useState({ done: 0, total: 0, catLabel: "", record: "", pct: 0 });
+  const [results,     setResults]   = useState([]);
+  const [valErrors,   setValErrors] = useState([]);
+  const [skippedRows, setSkippedRows] = useState([]);
+  const [failLog,     setFailLog]   = useState([]);
 
   const [dupModalOpen,  setDupModalOpen]  = useState(false);
   const [allDuplicates, setAllDuplicates] = useState([]);
@@ -119,6 +139,7 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
       setPlan([]);
       setResults([]);
       setValErrors([]);
+      setSkippedRows([]);
       setFailLog([]);
       setDupModalOpen(false);
       setAllDuplicates([]);
@@ -166,23 +187,32 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     const active = plan.filter((p) => p.checked);
     if (!active.length) return;
 
-    const errors = validatePlan(active);
-    if (errors.length > 0) {
-      setValErrors(errors.slice(0, 20));
+    // validatePlan now returns { cleanPlan, skipped } — never an array
+    const { cleanPlan: validatedPlan, skipped } = validatePlan(active);
+    if (skipped.length > 0) setSkippedRows(skipped);
+
+    const totalValid = validatedPlan.reduce((s, p) => s + p.rows.length, 0);
+    if (totalValid === 0) {
+      // Every single row is invalid — block upload and show errors
+      setValErrors(
+        skipped.flatMap((s) =>
+          s.reasons.map((r) => `${s.catLabel} — Row ${s.rowNum}: ${r}`)
+        ).slice(0, 20)
+      );
       setStep("validation-error");
       return;
     }
 
     setStep("checking");
 
-    const preflightResults = await Promise.all(active.map((p) => preflight(p)));
+    const preflightResults = await Promise.all(validatedPlan.map((p) => preflight(p)));
 
     const gathered = { duplicates: [], cleanPlans: [] };
 
     preflightResults.forEach((result, i) => {
       gathered.duplicates.push(...result.duplicates);
       if (result.clean.length > 0) {
-        gathered.cleanPlans.push({ ...active[i], rows: result.clean });
+        gathered.cleanPlans.push({ ...validatedPlan[i], rows: result.clean });
       }
     });
 
@@ -192,13 +222,18 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
       setStep("preview");
       setDupModalOpen(true);
 
+      // Only upload the clean (non-duplicate) rows
       if (gathered.cleanPlans.length > 0) {
         _runUpload(gathered.cleanPlans);
+      } else {
+        // All rows are duplicates — no upload needed
+        setStep("done");
+        setResults([{ catLabel: "Centres", accent: "#8b5cf6", success: 0, failed: 0, skipped: gathered.duplicates.length }]);
       }
       return;
     }
 
-    await _runUpload(active);
+    await _runUpload(validatedPlan);
   };
 
   // ── Core upload runner ─────────────────────────────────────────────────────
@@ -216,6 +251,7 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     for (const p of activePlan) {
       let catSuccess = 0;
       let catFailed  = 0;
+      let catSkipped = 0;
 
       const batches = [];
       for (let i = 0; i < p.rows.length; i += IMPORT_BATCH_SIZE)
@@ -229,10 +265,11 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
 
         setUpState((prev) => ({ ...prev, catLabel: p.catLabel, record: firstRecord }));
 
-        const { success, failed, errors: batchErrors } = await uploadBatch(p.endpoint, batch, p.fields);
+        const { success, failed, skipped = 0, errors: batchErrors } = await uploadBatch(p.endpoint, batch, p.fields);
 
         catSuccess += success;
         catFailed  += failed;
+        catSkipped += skipped;
 
         if (batchErrors.length) {
           allFails.push(...batchErrors.map((e) => ({ category: p.catLabel, ...e })));
@@ -242,10 +279,10 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
         setUpState((prev) => ({ ...prev, done, pct: Math.round((done / total) * 100) }));
       }
 
-      console.log(`[Import] "${p.catLabel}" done — ✓ ${catSuccess} succeeded, ✗ ${catFailed} failed`);
+      console.log(`[Import] "${p.catLabel}" done — ✓ ${catSuccess} inserted, ✗ ${catFailed} failed, ⟳ ${catSkipped} skipped duplicates`);
       console.groupEnd();
 
-      finals.push({ catLabel: p.catLabel, accent: p.accent, success: catSuccess, failed: catFailed });
+      finals.push({ catLabel: p.catLabel, accent: p.accent, success: catSuccess, failed: catFailed, skipped: catSkipped });
     }
 
     setResults((prev) => {
@@ -267,8 +304,10 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
 
     const ts = finals.reduce((s, r) => s + r.success, 0);
     const tf = finals.reduce((s, r) => s + r.failed,  0);
+    const tk = finals.reduce((s, r) => s + (r.skipped ?? 0), 0);
 
     if (ts > 0) { onUploaded(); toast.success(`${ts} records imported successfully!`); }
+    else if (tk > 0) toast(`All ${tk} records are already in the database — nothing new to import.`, { icon: "⚠️" });
     if (tf > 0) toast.error(`${tf} records failed — see details below.`);
   };
 
@@ -612,6 +651,7 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
                       <span className="text-slate-700 text-sm font-medium">{r.catLabel}</span>
                       <div className="flex items-center gap-3 text-xs font-semibold">
                         {r.success > 0 && <span className="text-emerald-600">✓ {r.success} added</span>}
+                        {(r.skipped ?? 0) > 0 && <span className="text-amber-600">⟳ {r.skipped} duplicate{r.skipped !== 1 ? "s" : ""} skipped</span>}
                         {r.failed  > 0 && <span className="text-red-500">✗ {r.failed} failed</span>}
                       </div>
                     </div>
