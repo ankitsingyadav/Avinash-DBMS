@@ -156,34 +156,107 @@ export const CATEGORIES = [
       "state", "pincode", "onboardedBy", "contacts",
     ],
     fieldMap: {
-      centrename:         "centreName",
-      name:               "centreName",
-      "centre name":      "centreName",
-      centretype:         "centreType",
-      type:               "centreType",
-      "centre type":      "centreType",
-      website:            "website",
-      address:            "address",
-      city:               "city",
-      district:           "district",
-      state:              "state",
-      pincode:            "pincode",
-      onboardedby:        "onboardedBy",
-      "onboarded by":     "onboardedBy",
-      "nin ain":          "ninAin",
-      "nin/ain":          "ninAin",
-      ninain:             "ninAin",
-      phone:              "phone",
-      contact:            "phone",
-      "contact number":   "phone",
-      mobile:             "phone",
-      "mobile number":    "phone",
-      email:              "email",
-      "email address":    "email",
-      status:             "status",
-      data:               "status",
-      id:                 "_id",
-      _id:                "_id",
+      // Centre name — British + American spelling, with/without space
+      centrename:              "centreName",
+      centername:              "centreName",   // American spelling "center"
+      "centre name":           "centreName",
+      "center name":           "centreName",   // American spelling with space
+      name:                    "centreName",
+      "organisation name":     "centreName",
+      "organization name":     "centreName",
+
+      // Centre type
+      centretype:              "centreType",
+      centertype:              "centreType",
+      "centre type":           "centreType",
+      "center type":           "centreType",
+      type:                    "centreType",
+      category:                "centreType",
+
+      // Location
+      website:                 "website",
+      address:                 "address",
+      city:                    "city",
+      district:                "district",
+      state:                   "state",
+      pincode:                 "pincode",
+      pin:                     "pincode",
+      "pin code":              "pincode",
+      "zip code":              "pincode",
+      zip:                     "pincode",
+
+      // Onboarding
+      onboardedby:             "onboardedBy",
+      "onboarded by":          "onboardedBy",
+      "added by":              "onboardedBy",
+
+      // NIN / AIN
+      "nin ain":               "ninAin",
+      "nin/ain":               "ninAin",
+      ninain:                  "ninAin",
+      nin:                     "ninAin",
+      ain:                     "ninAin",
+      "nin number":            "ninAin",
+      "ain number":            "ninAin",
+
+      // Phone — plain + "(contact)" suffix variants from Google Sheets exports
+      phone:                   "phone",
+      "phone (contact)":       "phone",
+      "phone(contact)":        "phone",
+      "phone no":              "phone",
+      "phone number":          "phone",
+      contact:                 "phone",
+      "contact number":        "phone",
+      "contact no":            "phone",
+      mobile:                  "phone",
+      "mobile number":         "phone",
+      "mobile no":             "phone",
+      "mobile (contact)":      "phone",
+
+      // Email — plain + "(contact)" suffix variants
+      email:                   "email",
+      "email (contact)":       "email",
+      "email(contact)":        "email",
+      "email address":         "email",
+      "email id":              "email",
+      "e-mail":                "email",
+
+      // Contact person name
+      "contact person":        "contactPerson",
+      contactperson:           "contactPerson",
+      "contact name":          "contactPerson",
+
+      // Designation
+      designation:             "designation",
+      role:                    "designation",
+      position:                "designation",
+
+      // Interaction fields
+      interactionby:           "interactionBy",
+      "interaction by":        "interactionBy",
+      "done by":               "interactionBy",
+      interactedwith:          "interactedWith",
+      "interacted with":       "interactedWith",
+      "spoke with":            "interactedWith",
+      interactiondate:         "interactionDate",
+      "interaction date":      "interactionDate",
+      "date of interaction":   "interactionDate",
+      interactionmode:         "interactionMode",
+      "interaction mode":      "interactionMode",
+      mode:                    "interactionMode",
+      notes:                   "notes",
+      remarks:                 "notes",
+      "next interaction date": "nextInteractionDate",
+      "next date":             "nextInteractionDate",
+      nextinteractiondate:     "nextInteractionDate",
+
+      // Status
+      status:                  "status",
+      data:                    "status",
+      "data status":           "status",
+
+      id:                      "_id",
+      _id:                     "_id",
     },
     signatureFields: ["centreType", "onboardedBy"],
     editFields: [
