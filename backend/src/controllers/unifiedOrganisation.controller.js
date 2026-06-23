@@ -155,11 +155,10 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     }
   }
 
-  // ── Duplicate check (centreName + centreType + pincode) ────────────────────
+  // ── Duplicate check (centreName + pincode — centreType-agnostic) ─────────
   const normalisedPincode = normalisePincode(pincode);
 
   const duplicate = await Organisation.findOne({
-    centreType,
     centreName: { $regex: `^${escapeRegex(centreName.trim())}$`, $options: "i" },
     pincode:    normalisedPincode,
   })
@@ -238,68 +237,83 @@ export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
   if (records.length > BULK_LIMIT)
     return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
 
-  // ── Build one $or query that covers every incoming record ──────────────────
+  // ── Step 1: Intra-batch duplicates (same centreName + pincode within the file) ──
+  const seenInBatch  = new Map();   // key → first occurrence index
+  const intraBatch   = [];          // { index, incoming, duplicateOfIndex }
+
+  records.forEach((r, index) => {
+    const name = String(r.centreName || "").trim().toLowerCase();
+    const pin  = normalisePincode(r.pincode);
+    if (!name || !pin) return;      // incomplete rows — skip dedupe check
+
+    const key = `${name}___${pin}`;
+    if (seenInBatch.has(key)) {
+      intraBatch.push({ index, incoming: r, duplicateOfIndex: seenInBatch.get(key) });
+    } else {
+      seenInBatch.set(key, index);
+    }
+  });
+
+  // ── Step 2: DB duplicates — check centreName + pincode only (no centreType) ──
   const orConditions = records
     .map((r) => {
       const name = String(r.centreName || "").trim();
-      const type = String(r.centreType || "").trim();
       const pin  = normalisePincode(r.pincode);
-      if (!name || !type || !pin) return null;          // incomplete — skip
+      if (!name || !pin) return null;
       return {
-        centreType: type,
         centreName: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
         pincode:    pin,
       };
     })
     .filter(Boolean);
 
-  // If every record was incomplete, short-circuit — nothing to check
   if (orConditions.length === 0) {
     return sendSuccess(res, 200, "Duplicate check completed.", {
-      duplicates: [],
-      cleanCount: records.length,
-      total:      records.length,
+      duplicates:  [],
+      intraBatch,
+      cleanCount:  records.length,
+      total:       records.length,
     });
   }
 
-  // Single DB round-trip for all records
+  // Single DB round-trip covering every incoming row
   const existingDocs = await Organisation.find({ $or: orConditions })
     .select("centreName centreType pincode city district state")
     .lean();
 
-  // O(1) lookup map: "name___type___pin" → existing doc
+  // O(1) lookup: "name___pin" → existing doc
   const existingMap = new Map();
   existingDocs.forEach((doc) => {
-    const key = [
-      doc.centreName.toLowerCase().trim(),
-      doc.centreType,
-      doc.pincode,
-    ].join("___");
+    const key = `${doc.centreName.toLowerCase().trim()}___${doc.pincode}`;
     existingMap.set(key, doc);
   });
 
-  // Match incoming records against the map
-  const duplicates = [];
+  // Match every incoming record against the DB map
+  const dbDuplicates = [];
+  const intraBatchIndices = new Set(intraBatch.map((d) => d.index));
+
   records.forEach((r, index) => {
+    if (intraBatchIndices.has(index)) return; // already flagged as intra-batch dup
     const name = String(r.centreName || "").trim().toLowerCase();
-    const type = String(r.centreType || "").trim();
     const pin  = normalisePincode(r.pincode);
-    const key  = `${name}___${type}___${pin}`;
+    const key  = `${name}___${pin}`;
 
     const existDoc = existingMap.get(key);
     if (existDoc) {
-      duplicates.push({
-        index,           // position in original array — used by frontend to correlate
-        incoming: r,     // the row that was about to be imported
-        existing: existDoc, // what's already in the DB
-      });
+      dbDuplicates.push({ index, incoming: r, existing: existDoc });
     }
   });
 
+  const allDuplicateIndices = new Set([
+    ...intraBatch.map((d) => d.index),
+    ...dbDuplicates.map((d) => d.index),
+  ]);
+
   return sendSuccess(res, 200, "Duplicate check completed.", {
-    duplicates,
-    cleanCount: records.length - duplicates.length,
-    total:      records.length,
+    duplicates:  dbDuplicates,        // DB-level duplicates (for frontend modal)
+    intraBatch,                        // within-file duplicates
+    cleanCount:  records.length - allDuplicateIndices.size,
+    total:       records.length,
   });
 });
 
@@ -316,32 +330,47 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
   if (records.length > BULK_LIMIT)
     return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
 
-  // ── Pre-flight: check against existing DB records to surface duplicates ────
-  const orConditions = records
+  // ── Stage 1: Remove intra-batch duplicates (same centreName + pincode in the file) ──
+  // This prevents two rows for the same centre from racing past the DB check.
+  const seenInBatch         = new Set();
+  let   skippedIntraBatch   = 0;
+  const deduplicatedRecords = [];
+
+  records.forEach((r) => {
+    const name = String(r.centreName || "").trim().toLowerCase();
+    const pin  = normalisePincode(r.pincode);
+    const key  = `${name}___${pin}`;
+
+    if (name && pin && seenInBatch.has(key)) {
+      skippedIntraBatch++;
+    } else {
+      if (name && pin) seenInBatch.add(key);
+      deduplicatedRecords.push(r);
+    }
+  });
+
+  // ── Stage 2: DB pre-flight — centreName + pincode only (centreType-agnostic) ──
+  const orConditions = deduplicatedRecords
     .map((r) => {
       const name = String(r.centreName || "").trim();
-      const type = String(r.centreType || "").trim();
       const pin  = normalisePincode(r.pincode);
-      if (!name || !type || !pin) return null;
+      if (!name || !pin) return null;
       return {
-        centreType: type,
         centreName: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
         pincode:    pin,
       };
     })
     .filter(Boolean);
 
-  let skippedDuplicates = 0;
-  const duplicateKeys   = new Set();
+  let skippedDbDuplicates = 0;
+  const duplicateKeys     = new Set();
 
   if (orConditions.length > 0) {
     const existingDocs = await Organisation.find({ $or: orConditions })
-      .select("centreName centreType pincode")
+      .select("centreName pincode")
       .lean();
     existingDocs.forEach((doc) => {
-      duplicateKeys.add(
-        `${doc.centreName.toLowerCase().trim()}___${doc.centreType}___${doc.pincode}`
-      );
+      duplicateKeys.add(`${doc.centreName.toLowerCase().trim()}___${doc.pincode}`);
     });
   }
 
@@ -349,18 +378,17 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
   let placeholderNinAin = 0;
   let placeholderEmail  = 0;
 
-  const sanitised = records
+  const sanitised = deduplicatedRecords
     .map((r) => {
-      const slug     = String(r.centreName || r.name || "record")
+      const slug = String(r.centreName || r.name || "record")
         .toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 24);
-      const name     = String(r.centreName || "").trim();
-      const type     = String(r.centreType || "").trim();
-      const pin      = normalisePincode(r.pincode);
-      const key      = `${name.toLowerCase()}___${type}___${pin}`;
+      const name = String(r.centreName || "").trim();
+      const pin  = normalisePincode(r.pincode);
+      const key  = `${name.toLowerCase()}___${pin}`;
 
       // Skip rows that already exist in the DB
       if (duplicateKeys.has(key)) {
-        skippedDuplicates++;
+        skippedDbDuplicates++;
         return null;
       }
 
@@ -375,7 +403,7 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       if (!rawNin) placeholderNinAin++;
 
       return {
-        centreType:   type,
+        centreType:   String(r.centreType || "").trim(),
         centreName:   name,
         website:      normaliseWebsite(r.website),
         address:      String(r.address || "").trim(),
@@ -412,12 +440,16 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
     })
     .filter(Boolean);
 
+  const skippedDuplicates = skippedIntraBatch + skippedDbDuplicates;
+
   if (sanitised.length === 0) {
     return sendSuccess(res, 200, "No new records to import — all are duplicates.", {
-      inserted:          0,
-      failed:            0,
+      inserted:           0,
+      failed:             0,
       skippedDuplicates,
-      total:             records.length,
+      skippedIntraBatch,
+      skippedDbDuplicates,
+      total:              records.length,
     });
   }
 
@@ -428,12 +460,14 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
     });
 
     return sendSuccess(res, 201, "Bulk import completed.", {
-      inserted:          result.length,
-      failed:            sanitised.length - result.length,
+      inserted:           result.length,
+      failed:             sanitised.length - result.length,
       skippedDuplicates,
+      skippedIntraBatch,
+      skippedDbDuplicates,
       placeholderNinAin,
       placeholderEmail,
-      total:             records.length,
+      total:              records.length,
     });
 
   } catch (err) {
@@ -447,15 +481,17 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       );
 
       return res.status(207).json({
-        success:           true,
-        message:           `${inserted} imported, ${failed} failed, ${skippedDuplicates} skipped (duplicates).`,
+        success:            true,
+        message:            `${inserted} imported, ${failed} failed, ${skippedDuplicates} skipped (duplicates).`,
         inserted,
         failed,
         skippedDuplicates,
+        skippedIntraBatch,
+        skippedDbDuplicates,
         placeholderNinAin,
         placeholderEmail,
-        total:             records.length,
-        errors:            writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
+        total:              records.length,
+        errors:             writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
       });
     }
 

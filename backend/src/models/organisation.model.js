@@ -219,10 +219,13 @@ organisationSchema.pre("updateOne", async function () {
 });
 
 // ── Indexes ───────────────────────────────────────────────────────────────────
-// Unique guard — prevents duplicate centres (same name+type+pincode)
-// Case-insensitive via collation; sparse allows missing pincodes gracefully
+// Unique guard — same centre name at same pincode is always a duplicate,
+// regardless of centreType.  Case-insensitive via collation strength 2.
+// MIGRATION NOTE: if upgrading from the old (name+type+pin) index, run:
+//   db.organisations.dropIndex("centreName_1_centreType_1_pincode_1")
+// before deploying, so Mongoose can build this new index cleanly.
 organisationSchema.index(
-  { centreName: 1, centreType: 1, pincode: 1 },
+  { centreName: 1, pincode: 1 },
   { unique: true, collation: { locale: "en", strength: 2 } }
 );
 organisationSchema.index({ centreName: "text", city: "text", district: "text" });

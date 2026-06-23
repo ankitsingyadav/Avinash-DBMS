@@ -73,9 +73,14 @@ async function preflight(p) {
       records: payloads,
     });
 
-    const { duplicates = [] } = res.data?.data ?? {};
-    const dupSet = new Set(duplicates.map((d) => d.index));
-    const clean  = p.rows.filter((_, i) => !dupSet.has(i));
+    const { duplicates = [], intraBatch = [] } = res.data?.data ?? {};
+
+    // Combine DB duplicates + within-file duplicates into one exclusion set
+    const allDupIndices = new Set([
+      ...duplicates.map((d) => d.index),
+      ...intraBatch.map((d) => d.index),
+    ]);
+    const clean = p.rows.filter((_, i) => !allDupIndices.has(i));
 
     const enriched = duplicates.map((d) => ({
       ...d,
@@ -85,7 +90,7 @@ async function preflight(p) {
       fields:    p.fields,
     }));
 
-    return { clean, duplicates: enriched };
+    return { clean, duplicates: enriched, intraBatchCount: intraBatch.length };
   } catch (err) {
     console.warn("[Import] Pre-flight check failed, skipping dedup:", err?.response?.data ?? err.message);
     return { clean: p.rows, duplicates: [] };
