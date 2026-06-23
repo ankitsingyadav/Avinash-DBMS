@@ -117,7 +117,12 @@ router.delete(
 // ═════════════════════════════════════════════════════════════════════════════
 
 // Bell icon — interactions due in next 48 h
-router.get("/upcoming-interactions", getUpcomingInteractions);
+router.get(
+  "/upcoming-interactions",
+  checkModuleAccess("organisation"),
+  checkActionAccess("view"),
+  getUpcomingInteractions,
+);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ORGANISATION BULK ROUTES

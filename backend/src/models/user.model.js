@@ -86,6 +86,11 @@ const userSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+      // Access to notification bell and /notifications page
+      notificationAccess: {
+        type: Boolean,
+        default: false,
+      },
     },
 
     profileImage: {

@@ -1,32 +1,15 @@
 // ─── pages/Notificationspage.jsx ─────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import axios from "../utils/axios.js";
 import Navbar from "../components/Navbar";
-
-// ── sessionStorage helpers for cancelled orgs ─────────────────────────────────
-const SS_KEY = "np_cancelled_orgs";
-
-const loadCancelledOrgs = () => {
-  try {
-    return new Set(JSON.parse(sessionStorage.getItem(SS_KEY) || "[]"));
-  } catch {
-    return new Set();
-  }
-};
-
-const saveCancelledOrgs = (set) => {
-  try {
-    sessionStorage.setItem(SS_KEY, JSON.stringify([...set]));
-  } catch {}
-};
-
-const addCancelledOrg = (orgId) => {
-  const current = loadCancelledOrgs();
-  current.add(orgId);
-  saveCancelledOrgs(current);
-  return current;
-};
+import {
+  loadCancelledKeys,
+  addCancelledKey,
+  isCancelled,
+  getSoonestPerOrg,
+} from "../utils/notificationUtils.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const getTimeRemaining = (date) => {
@@ -317,39 +300,6 @@ function TimeProgress({ pct, color, overdue }) {
   );
 }
 
-// ── Helper: Get latest interaction per organisation ───────────────────────────
-const getLatestPerOrg = (list) => {
-  if (!list || list.length === 0) return [];
-
-  const orgMap = {};
-
-  list.forEach((item) => {
-    const orgId = item._id;
-    if (!orgMap[orgId]) {
-      orgMap[orgId] = item;
-      return;
-    }
-
-    const existing = orgMap[orgId];
-
-    const existingTime = new Date(
-      existing.createdAt || existing.savedAt || existing.nextInteractionDate
-    ).getTime();
-    const itemTime = new Date(
-      item.createdAt || item.savedAt || item.nextInteractionDate
-    ).getTime();
-
-    if (!existing.createdAt && !existing.savedAt && !item.createdAt && !item.savedAt) {
-      if ((item.interactionIndex ?? 0) > (existing.interactionIndex ?? 0)) {
-        orgMap[orgId] = item;
-      }
-    } else if (itemTime > existingTime) {
-      orgMap[orgId] = item;
-    }
-  });
-
-  return Object.values(orgMap);
-};
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Notificationspage() {
@@ -360,8 +310,8 @@ export default function Notificationspage() {
   const [loading,      setLoading]      = useState(true);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling,   setCancelling]   = useState(false);
-  const [tick,         setTick]         = useState(0);
   const lastFetchRef = useRef(0);
+  const tickRef      = useRef(null);
 
   // Filters
   const [filterMode,    setFilterMode]    = useState("");
@@ -369,21 +319,16 @@ export default function Notificationspage() {
   const [filterType,    setFilterType]    = useState("");
   const [searchQ,       setSearchQ]       = useState("");
 
-  const tickRef = useRef(null);
-
-  // ── Fetch — sessionStorage se cancelled orgs padhkar filter karo ────────────
+  // ── Fetch — localStorage se cancelled interactions padhkar filter karo ───────
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res  = await axios.get("/organisations/upcoming-interactions");
-      const list = res.data?.interactions || [];
-
-      // Har fetch pe sessionStorage se fresh padho — page refresh ke baad bhi kaam karega
-      const cancelled = loadCancelledOrgs();
-      const filtered  = cancelled.size > 0
-        ? list.filter((i) => !cancelled.has(String(i._id)))
+      const res        = await axios.get("/organisations/upcoming-interactions");
+      const list       = res.data?.interactions || [];
+      const cancelled  = loadCancelledKeys();
+      const filtered   = cancelled.size > 0
+        ? list.filter((i) => !isCancelled(i, cancelled))
         : list;
-
       setInteractions(filtered);
       lastFetchRef.current = Date.now();
     } catch {
@@ -393,43 +338,34 @@ export default function Notificationspage() {
     }
   }, []);
 
-  // Initial fetch
   useEffect(() => {
     fetchData();
     const ref = setInterval(() => fetchData(true), 3 * 60 * 1000);
     return () => clearInterval(ref);
   }, [fetchData]);
 
-  // Refetch when tab becomes visible again
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        const timeSinceFetch = Date.now() - lastFetchRef.current;
-        if (timeSinceFetch > 5000) {
-          fetchData(true);
-        }
-      }
+    const handle = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastFetchRef.current > 5000)
+        fetchData(true);
     };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("visibilitychange", handle);
+    return () => document.removeEventListener("visibilitychange", handle);
   }, [fetchData]);
 
-  // Listen for custom event from AdminPage
   useEffect(() => {
-    const handleInteractionSaved = () => {
-      fetchData(true);
-    };
-    window.addEventListener("interaction-saved", handleInteractionSaved);
-    return () => window.removeEventListener("interaction-saved", handleInteractionSaved);
+    const handle = () => fetchData(true);
+    window.addEventListener("interaction-saved", handle);
+    return () => window.removeEventListener("interaction-saved", handle);
   }, [fetchData]);
 
-  // Countdown re-render every 30s
+  // Countdown re-render every 30s to keep time labels fresh
   useEffect(() => {
-    tickRef.current = setInterval(() => setTick((t) => t + 1), 30 * 1000);
+    tickRef.current = setInterval(() => setFilterMode((m) => m), 30 * 1000);
     return () => clearInterval(tickRef.current);
   }, []);
 
-  // ── Cancel ──────────────────────────────────────────────────────────────────
+  // ── Cancel — removes only the specific interaction, not the whole org ────────
   const handleCancelConfirm = async () => {
     if (!cancelTarget) return;
     setCancelling(true);
@@ -437,23 +373,25 @@ export default function Notificationspage() {
     const removedId    = String(cancelTarget._id);
     const removedIndex = cancelTarget.interactionIndex;
 
-    // 1. sessionStorage mein org ID save karo — refresh ke baad bhi persist rahega
-    addCancelledOrg(removedId);
+    // 1. Persist to localStorage (cross-tab) before optimistic UI update
+    addCancelledKey(removedId, removedIndex);
 
-    // 2. State se poori org hata do — koi bhi purana interaction wapas na aaye
-    setInteractions((prev) => prev.filter((i) => String(i._id) !== removedId));
+    // 2. Remove only the specific interaction entry from state
+    setInteractions((prev) =>
+      prev.filter((i) => !(String(i._id) === removedId && i.interactionIndex === removedIndex))
+    );
 
-    // 3. Modal band karo immediately
     setCancelTarget(null);
     setCancelling(false);
 
-    // 4. API call (optimistic update ho chuka hai)
+    // 3. API call — rollback + toast on failure
     try {
       await axios.post(`/organisations/${removedId}/interactions/cancel`, {
         interactionIndex: removedIndex,
       });
     } catch {
-      // Silent — fetchData bhi sessionStorage se filter karega
+      toast.error("Failed to cancel interaction. Please try again.");
+      fetchData(true); // restore correct state from server
     }
   };
 
@@ -463,15 +401,16 @@ export default function Notificationspage() {
     navigate(`/admin?tab=organisation&highlight=${item._id}&filter=upcoming`);
   };
 
-  // ── Filter logic ──────────────────────────────────────────────────────────
+  // ── Filter logic ─────────────────────────────────────────────────────────────
   const filtered = interactions.filter((item) => {
     const tr = getTimeRemaining(item.nextInteractionDate);
-    if (filterUrgency === "overdue"   && !tr.overdue)                  return false;
-    if (filterUrgency === "critical"  && (!tr.critical || tr.overdue)) return false;
-    if (filterUrgency === "urgent"    && (!tr.urgent || tr.overdue || tr.critical)) return false;
-    if (filterUrgency === "upcoming"  && tr.urgent)                    return false;
-    if (filterMode && item.interactionMode !== filterMode)             return false;
-    if (filterType && item.centreType !== filterType)                  return false;
+    if (filterUrgency === "overdue"  && !tr.overdue)                              return false;
+    if (filterUrgency === "critical" && (!tr.critical || tr.overdue))             return false;
+    if (filterUrgency === "urgent"   && (!tr.urgent || tr.overdue || tr.critical)) return false;
+    // "on-track" = not overdue, not critical, not urgent (>12h)
+    if (filterUrgency === "on-track" && tr.urgent)                                return false;
+    if (filterMode && item.interactionMode !== filterMode)                        return false;
+    if (filterType && item.centreType     !== filterType)                         return false;
     if (searchQ) {
       const q = searchQ.toLowerCase();
       if (
@@ -484,16 +423,16 @@ export default function Notificationspage() {
     return true;
   });
 
-  // ── Per-org latest: har organisation ka sirf ek latest interaction ─────────
-  const displayList = getLatestPerOrg(filtered);
+  // Pick soonest per org (not latest) so most urgent shows first
+  const displayList = getSoonestPerOrg(filtered);
 
-  // Stats — per-org deduplicated list se
-  const allOrgs  = getLatestPerOrg(interactions);
+  // Stats — computed from soonest-per-org deduplicated list
+  const allOrgs  = getSoonestPerOrg(interactions);
   const total    = allOrgs.length;
   const overdue  = allOrgs.filter((i) => getTimeRemaining(i.nextInteractionDate).overdue).length;
   const critical = allOrgs.filter((i) => { const t = getTimeRemaining(i.nextInteractionDate); return t.critical && !t.overdue; }).length;
   const urgent   = allOrgs.filter((i) => { const t = getTimeRemaining(i.nextInteractionDate); return t.urgent && !t.overdue && !t.critical; }).length;
-  const safe     = total - overdue - critical - urgent;
+  const onTrack  = total - overdue - critical - urgent;
 
   const modes     = [...new Set(interactions.map((i) => i.interactionMode).filter(Boolean))];
   const types     = [...new Set(interactions.map((i) => i.centreType).filter(Boolean))];
@@ -581,7 +520,7 @@ export default function Notificationspage() {
             { label: "Total",    value: total,    color: "#4060cc", key: "",         icon: "📋" },
             { label: "Overdue",  value: overdue,  color: "#dc2626", key: "overdue",  icon: "🔴" },
             { label: "< 2h",     value: critical, color: "#c2410c", key: "critical", icon: "⚡" },
-            { label: "Upcoming", value: safe,     color: "#065f46", key: "upcoming", icon: "🟢" },
+            { label: "On Track", value: onTrack,  color: "#065f46", key: "on-track", icon: "🟢" },
           ].map((s) => {
             const active = filterUrgency === s.key || (s.key === "" && !filterUrgency);
             return (

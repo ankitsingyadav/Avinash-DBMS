@@ -55,10 +55,6 @@ const interactionSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    ninAin: {
-      type: String,
-      trim: true,
-    },
     nextInteractionDate: {
       type: Date,
     },
@@ -223,6 +219,12 @@ organisationSchema.pre("updateOne", async function () {
 });
 
 // ── Indexes ───────────────────────────────────────────────────────────────────
+// Unique guard — prevents duplicate centres (same name+type+pincode)
+// Case-insensitive via collation; sparse allows missing pincodes gracefully
+organisationSchema.index(
+  { centreName: 1, centreType: 1, pincode: 1 },
+  { unique: true, collation: { locale: "en", strength: 2 } }
+);
 organisationSchema.index({ centreName: "text", city: "text", district: "text" });
 organisationSchema.index({ centreType: 1 });
 organisationSchema.index({ state: 1 });
