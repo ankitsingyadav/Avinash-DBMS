@@ -27,8 +27,9 @@ const sanitisePermissions = (perms = {}) => ({
   hiddenFields: Array.isArray(perms.hiddenFields)
     ? perms.hiddenFields.filter((f) => ["phone", "email"].includes(f))
     : [],
-  dateFrom: perms.dateFrom ? new Date(perms.dateFrom) : null,
-  dateTo:   perms.dateTo   ? new Date(perms.dateTo)   : null,
+  dateFrom:           perms.dateFrom ? new Date(perms.dateFrom) : null,
+  dateTo:             perms.dateTo   ? new Date(perms.dateTo)   : null,
+  notificationAccess: perms.notificationAccess === true,
 });
 
 // ── GET /api/v1/users ─────────────────────────────────────────────────────────
@@ -60,10 +61,10 @@ export const getAllUsers = asyncHandler(async (req, res) => {
 
 // ── POST /api/v1/users — Create a managed user ────────────────────────────────
 export const createManagedUser = asyncHandler(async (req, res) => {
-  const { fullName, email, phone, password, age, role, permissions } = req.body;
+  const { fullName, email, phone, password, ninAinNumber, role, permissions } = req.body;
 
-  if (!fullName || !email || !phone || !password || !age) {
-    return sendError(res, 422, "All fields are required: fullName, email, phone, password, age.");
+  if (!fullName || !email || !phone || !password || !ninAinNumber) {
+    return sendError(res, 422, "All fields are required: fullName, email, phone, password, ninAinNumber.");
   }
 
   const assignedRole = ALLOWED_ROLES.includes(role) ? role : "user";
@@ -79,13 +80,13 @@ export const createManagedUser = asyncHandler(async (req, res) => {
   }
 
   const user = await User.create({
-    fullName:    fullName.trim(),
-    email:       email.toLowerCase().trim(),
-    phone:       phone.trim(),
+    fullName:     fullName.trim(),
+    email:        email.toLowerCase().trim(),
+    phone:        phone.trim(),
     password,
-    age:         parseInt(age),
-    role:        assignedRole,
-    permissions: sanitisePermissions(permissions),
+    ninAinNumber: ninAinNumber.trim(),
+    role:         assignedRole,
+    permissions:  sanitisePermissions(permissions),
   });
 
   const userObj = user.toObject();
