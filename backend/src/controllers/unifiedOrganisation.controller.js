@@ -129,11 +129,11 @@ export const createOrganisation = asyncHandler(async (req, res) => {
   // ── Required-field gate ────────────────────────────────────────────────────
   if (
     !centreType || !centreName || !address || !city ||
-    !state      || !pincode   || !contacts || !onboardedBy || !interaction
+    !district   || !state     || !pincode || !contacts || !onboardedBy || !interaction
   ) {
     return sendError(
       res, 422,
-      "Missing required fields: centreType, centreName, address, city, state, pincode, contacts, onboardedBy, interaction."
+      "Missing required fields: centreType, centreName, address, city, district, state, pincode, contacts, onboardedBy, interaction."
     );
   }
 
@@ -316,82 +316,146 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
   if (records.length > BULK_LIMIT)
     return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
 
-  const sanitised = records.map((r) => {
-    const slug     = String(r.centreName || r.name || "record")
-      .toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 24);
-    const district = String(r.district || r.city || "Unknown District").trim();
+  // ── Pre-flight: check against existing DB records to surface duplicates ────
+  const orConditions = records
+    .map((r) => {
+      const name = String(r.centreName || "").trim();
+      const type = String(r.centreType || "").trim();
+      const pin  = normalisePincode(r.pincode);
+      if (!name || !type || !pin) return null;
+      return {
+        centreType: type,
+        centreName: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
+        pincode:    pin,
+      };
+    })
+    .filter(Boolean);
 
-    return {
-      centreType:   String(r.centreType || "").trim(),
-      centreName:   String(r.centreName || "").trim(),
-      website:      normaliseWebsite(r.website),
-      address:      String(r.address    || "").trim(),
-      city:         String(r.city       || "").trim(),
-      district,
-      state:        String(r.state      || "").trim(),
-      pincode:      normalisePincode(r.pincode),
-      contacts: [{
-        name:          String(r.contactPerson || r.name || r.centreName || "Administrator").trim(),
-        designation:   String(r.designation   || "Administrator").trim(),
-        contactNumber: String(r.phone || r.mobile || r.contactNumber || "9999999999").trim(),
-        email:         normaliseEmail(r.email, slug),
-      }],
-      interactions: [{
-        interactionBy:  String(r.interactionBy  || r.onboardedBy || "System Import").trim(),
-        interactedWith: String(
-          r.interactedWith || r.contactPerson || r.name || r.centreName || "Administrator"
-        ).trim(),
-        interactionDate:  r.interactionDate ? new Date(r.interactionDate) : new Date(),
-        interactionMode:  VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
-        notes:            String(r.notes || "Imported via bulk upload").trim(),
-        ninAin:           String(r.ninAin || r.interactionNinAin || "").trim()
-                            || `IMPORT-${slug.toUpperCase().slice(0, 10)}`,
-        ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
-          ? { nextInteractionDate: new Date(r.nextInteractionDate) }
-          : {}),
-        // NEW: optional nextNotes column support during bulk import
-        ...(r.nextNotes && String(r.nextNotes).trim()
-          ? { nextNotes: String(r.nextNotes).trim() }
-          : {}),
-      }],
-      onboardedBy:  String(r.onboardedBy || "System Import").trim(),
-      ninAin:       String(r.ninAin || "").trim()
-                      || `NIN-IMPORT-${slug.toUpperCase().slice(0, 10)}`,
-      registeredBy: req.user._id,
-      status:       normaliseDataStatus(r.status),
-    };
-  });
+  let skippedDuplicates = 0;
+  const duplicateKeys   = new Set();
+
+  if (orConditions.length > 0) {
+    const existingDocs = await Organisation.find({ $or: orConditions })
+      .select("centreName centreType pincode")
+      .lean();
+    existingDocs.forEach((doc) => {
+      duplicateKeys.add(
+        `${doc.centreName.toLowerCase().trim()}___${doc.centreType}___${doc.pincode}`
+      );
+    });
+  }
+
+  // Track placeholder usage for transparency
+  let placeholderNinAin = 0;
+  let placeholderEmail  = 0;
+
+  const sanitised = records
+    .map((r) => {
+      const slug     = String(r.centreName || r.name || "record")
+        .toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 24);
+      const name     = String(r.centreName || "").trim();
+      const type     = String(r.centreType || "").trim();
+      const pin      = normalisePincode(r.pincode);
+      const key      = `${name.toLowerCase()}___${type}___${pin}`;
+
+      // Skip rows that already exist in the DB
+      if (duplicateKeys.has(key)) {
+        skippedDuplicates++;
+        return null;
+      }
+
+      const district = String(r.district || r.city || "Unknown District").trim();
+
+      const rawEmail   = String(r.email || "").trim().toLowerCase();
+      const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail);
+      if (!emailValid) placeholderEmail++;
+
+      const rawNin   = String(r.ninAin || "").trim();
+      const ninValue = rawNin || `NIN-IMPORT-${slug.toUpperCase().slice(0, 10)}`;
+      if (!rawNin) placeholderNinAin++;
+
+      return {
+        centreType:   type,
+        centreName:   name,
+        website:      normaliseWebsite(r.website),
+        address:      String(r.address || "").trim(),
+        city:         String(r.city    || "").trim(),
+        district,
+        state:        String(r.state   || "").trim(),
+        pincode:      pin,
+        contacts: [{
+          name:          String(r.contactPerson || r.name || r.centreName || "Administrator").trim(),
+          designation:   String(r.designation   || "Administrator").trim(),
+          contactNumber: String(r.phone || r.mobile || r.contactNumber || "9999999999").trim(),
+          email:         emailValid ? rawEmail : normaliseEmail(r.email, slug),
+        }],
+        interactions: [{
+          interactionBy:  String(r.interactionBy  || r.onboardedBy || "System Import").trim(),
+          interactedWith: String(
+            r.interactedWith || r.contactPerson || r.name || r.centreName || "Administrator"
+          ).trim(),
+          interactionDate: r.interactionDate ? new Date(r.interactionDate) : new Date(),
+          interactionMode: VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
+          notes:           String(r.notes || "Imported via bulk upload").trim(),
+          ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
+            ? { nextInteractionDate: new Date(r.nextInteractionDate) }
+            : {}),
+          ...(r.nextNotes && String(r.nextNotes).trim()
+            ? { nextNotes: String(r.nextNotes).trim() }
+            : {}),
+        }],
+        onboardedBy:  String(r.onboardedBy || "System Import").trim(),
+        ninAin:       ninValue,
+        registeredBy: req.user._id,
+        status:       normaliseDataStatus(r.status),
+      };
+    })
+    .filter(Boolean);
+
+  if (sanitised.length === 0) {
+    return sendSuccess(res, 200, "No new records to import — all are duplicates.", {
+      inserted:          0,
+      failed:            0,
+      skippedDuplicates,
+      total:             records.length,
+    });
+  }
 
   try {
     const result = await Organisation.insertMany(sanitised, {
-      ordered:       false,   // continue on error — maximise successful inserts
+      ordered:       false,
       runValidators: true,
     });
 
     return sendSuccess(res, 201, "Bulk import completed.", {
-      inserted: result.length,
-      failed:   records.length - result.length,
-      total:    records.length,
+      inserted:          result.length,
+      failed:            sanitised.length - result.length,
+      skippedDuplicates,
+      placeholderNinAin,
+      placeholderEmail,
+      total:             records.length,
     });
 
   } catch (err) {
     if (err.name === "BulkWriteError") {
       const inserted    = err.result?.nInserted ?? 0;
-      const failed      = records.length - inserted;
+      const failed      = sanitised.length - inserted;
       const writeErrors = (err.writeErrors ?? []).slice(0, 20);
 
       writeErrors.forEach((e) =>
         console.error(`[BulkImport] Row ${e.index} failed:`, e.errmsg)
       );
 
-      // 207 Multi-Status: partial success
       return res.status(207).json({
-        success:  true,
-        message:  `${inserted} imported, ${failed} failed.`,
+        success:           true,
+        message:           `${inserted} imported, ${failed} failed, ${skippedDuplicates} skipped (duplicates).`,
         inserted,
         failed,
-        total:    records.length,
-        errors:   writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
+        skippedDuplicates,
+        placeholderNinAin,
+        placeholderEmail,
+        total:             records.length,
+        errors:            writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
       });
     }
 
