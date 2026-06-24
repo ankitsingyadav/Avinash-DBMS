@@ -82,12 +82,14 @@ export function buildPayload(row, fields) {
       .replace(/[^a-z0-9]/g, "-")
       .slice(0, 30);
 
+    const contactNumber = String(row.phone || row.mobile || row.contactNumber || "").trim();
+
     payload.contacts = [
       {
         name:          String(row.contactPerson || row.name || row.centreName || "Administrator").trim(),
         designation:   String(row.designation   || "Administrator").trim(),
-        contactNumber: String(row.phone || row.mobile || row.contactNumber || "9999999999").trim(),
-        email:         emailOk ? rawEmail : `import-${namePart}@placeholder.local`,
+        ...(contactNumber && { contactNumber }),
+        email:         emailOk ? rawEmail : "",
       },
     ];
 
