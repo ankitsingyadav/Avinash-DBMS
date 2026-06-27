@@ -104,6 +104,8 @@ export function buildPayload(row, fields) {
 
     const VALID_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
 
+    const VALID_STATUSES = ["Pending", "Progressive", "Active", "Inactive", "Initiated"];
+
     payload.interaction = {
       interactionBy:   String(row.interactionBy   || row.onboardedBy || "System Import").trim(),
       interactedWith:  String(
@@ -118,17 +120,22 @@ export function buildPayload(row, fields) {
       interactionMode: VALID_MODES.includes(row.interactionMode)
         ? row.interactionMode
         : "Email",
+      interactionStatus: VALID_STATUSES.includes(row.interactionStatus)
+        ? row.interactionStatus
+        : "Initiated",
       notes: String(row.notes || "Imported via bulk upload").trim(),
     };
 
     // Optional interaction sub-fields
     if (row.ninAin && String(row.ninAin).trim())
-  payload.ninAin = String(row.ninAin).trim();
-else
-  payload.ninAin = `NIN-IMPORT-${namePart.toUpperCase().slice(0, 10)}`;
+      payload.ninAin = String(row.ninAin).trim();
+    else
+      payload.ninAin = `NIN-IMPORT-${namePart.toUpperCase().slice(0, 10)}`;
 
     const nextDate = parseDate(row.nextInteractionDate);
     if (nextDate) payload.interaction.nextInteractionDate = nextDate;
+    if (row.nextNotes && String(row.nextNotes).trim())
+      payload.interaction.nextNotes = String(row.nextNotes).trim();
   }
 
   // ── Universal required-field fallbacks ───────────────────────────────────
@@ -149,7 +156,7 @@ else
 
   // Ensure status has a default
   if (!payload.status)
-    payload.status = isOrganisation ? "Active" : "Active";
+    payload.status = "Basic";
 
   return payload;
 }

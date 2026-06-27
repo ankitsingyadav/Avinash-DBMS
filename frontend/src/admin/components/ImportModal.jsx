@@ -226,9 +226,10 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     if (gathered.duplicates.length > 0) {
       setAllDuplicates(gathered.duplicates);
       setCleanPlan(gathered.cleanPlans);
-      // Show dup review FIRST. Upload of clean rows happens in handleDupDone.
+      // "dup-review" step locks the ImportModal backdrop and hides the Import button
+      // while the DuplicateReviewModal (z-[60]) overlays with the merge/insert/skip UI.
+      setStep("dup-review");
       setDupModalOpen(true);
-      setStep("preview");
       return;
     }
 
@@ -343,7 +344,7 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
         <div
           className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-          onClick={step !== "uploading" && step !== "checking" ? onClose : undefined}
+          onClick={step !== "uploading" && step !== "checking" && step !== "dup-review" ? onClose : undefined}
         />
         <div className="relative w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
 
@@ -355,7 +356,7 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
               </svg>
               Import Data
             </h3>
-            {step !== "uploading" && step !== "checking" && (
+            {step !== "uploading" && step !== "checking" && step !== "dup-review" && (
               <button
                 onClick={onClose}
                 className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
@@ -509,6 +510,23 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
                   >
                     Import {totalSel} Records
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── STEP: dup-review ─────────────────────────────────────────── */}
+            {step === "dup-review" && (
+              <div className="py-6 flex flex-col items-center gap-4 text-center">
+                <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-slate-800 font-bold text-sm">Duplicates Found</p>
+                  <p className="text-slate-400 text-xs mt-1">
+                    Review the panel above — choose Skip, Merge, or Insert for each record.
+                  </p>
                 </div>
               </div>
             )}

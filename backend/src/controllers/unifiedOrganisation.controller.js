@@ -326,14 +326,16 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
   const deduplicatedRecords = [];
 
   records.forEach((r) => {
-    const name = String(r.centreName || "").trim().toLowerCase();
-    const pin  = normalisePincode(r.pincode);
-    const key  = `${name}___${pin}`;
+    const name  = String(r.centreName || "").trim().toLowerCase();
+    const pin   = normalisePincode(r.pincode);
+    const key   = `${name}___${pin}`;
+    const force = r.forceInsert === true;
 
-    if (name && pin && seenInBatch.has(key)) {
+    // forceInsert records bypass intra-batch dedup and DB duplicate check entirely
+    if (!force && name && pin && seenInBatch.has(key)) {
       skippedIntraBatch++;
     } else {
-      if (name && pin) seenInBatch.add(key);
+      if (!force && name && pin) seenInBatch.add(key);
       deduplicatedRecords.push(r);
     }
   });
@@ -373,7 +375,7 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       const pin  = normalisePincode(r.pincode);
       const key  = `${name.toLowerCase()}___${pin}`;
 
-      if (duplicateKeys.has(key)) {
+      if (!r.forceInsert && duplicateKeys.has(key)) {
         skippedDbDuplicates++;
         return null;
       }

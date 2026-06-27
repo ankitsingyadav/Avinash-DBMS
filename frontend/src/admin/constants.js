@@ -261,9 +261,11 @@ export const CATEGORIES = [
       "interaction.interactedWith",
       "interaction.interactionDate",
       "interaction.interactionMode",
+      "interaction.interactionStatus",
       "interaction.notes",
       "interaction.ninAin",
       "interaction.nextInteractionDate",
+      "interaction.nextNotes",
       "status",
     ],
     requiredFields: [
@@ -358,13 +360,27 @@ export const CATEGORIES = [
       mode: "interactionMode",
       notes: "notes",
       remarks: "notes",
+      "interaction notes": "notes",
+
+      interactionstatus: "interactionStatus",
+      "interaction status": "interactionStatus",
+      "centre status": "interactionStatus",
+      "org status": "interactionStatus",
+
       "next interaction date": "nextInteractionDate",
       "next date": "nextInteractionDate",
       nextinteractiondate: "nextInteractionDate",
+      "planned date": "nextInteractionDate",
+
+      nextnotes: "nextNotes",
+      "next notes": "nextNotes",
+      "next interaction notes": "nextNotes",
+      "planned notes": "nextNotes",
 
       status: "status",
       data: "status",
       "data status": "status",
+      "completion status": "status",
 
       id: "_id",
       _id: "_id",
