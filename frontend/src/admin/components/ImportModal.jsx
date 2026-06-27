@@ -16,20 +16,22 @@ async function uploadBatch(endpoint, batch, fields) {
     // Read actual inserted/failed counts from the response — never assume success = batch.length
     const data = res.data?.data ?? res.data ?? {};
     return {
-      success: data.inserted          ?? batch.length,
-      failed:  data.failed            ?? 0,
-      skipped: data.skippedDuplicates ?? 0,
-      errors:  [],
+      success:        data.inserted          ?? batch.length,
+      failed:         data.failed            ?? 0,
+      skipped:        data.skippedDuplicates ?? 0,
+      skippedDetails: data.skippedDetails    ?? [],
+      errors:         [],
     };
   } catch (bulkErr) {
     // 207 Multi-Status = partial success (some inserted, some failed/skipped)
     if (bulkErr?.response?.status === 207) {
       const data = bulkErr.response.data ?? {};
       return {
-        success: data.inserted          ?? 0,
-        failed:  data.failed            ?? 0,
-        skipped: data.skippedDuplicates ?? 0,
-        errors:  (data.errors ?? []).map((e) => ({
+        success:        data.inserted          ?? 0,
+        failed:         data.failed            ?? 0,
+        skipped:        data.skippedDuplicates ?? 0,
+        skippedDetails: data.skippedDetails    ?? [],
+        errors:         (data.errors ?? []).map((e) => ({
           rowIndex: e.index,
           row:      batch[e.index] ?? {},
           message:  e.message,
@@ -80,7 +82,7 @@ async function uploadBatch(endpoint, batch, fields) {
     }
   }
 
-  return { success, failed, skipped: 0, errors };
+  return { success, failed, skipped: 0, skippedDetails: [], errors };
 }
 
 // ── Pre-flight duplicate check ────────────────────────────────────────────────
@@ -226,26 +228,33 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     if (gathered.duplicates.length > 0) {
       setAllDuplicates(gathered.duplicates);
       setCleanPlan(gathered.cleanPlans);
-      // "dup-review" step locks the ImportModal backdrop and hides the Import button
-      // while the DuplicateReviewModal (z-[60]) overlays with the merge/insert/skip UI.
       setStep("dup-review");
       setDupModalOpen(true);
       return;
     }
 
-    await _runUpload(validatedPlan);
+    // No preflight duplicates — upload directly; backend returns skipped details
+    const skippedDups = await _runUpload(validatedPlan);
+    if (skippedDups.length > 0) {
+      setAllDuplicates(skippedDups);
+      setCleanPlan([]);
+      setStep("dup-review");
+      setDupModalOpen(true);
+    }
   };
 
   // ── Core upload runner ─────────────────────────────────────────────────────
+  // Returns enriched skipped-duplicate details so the caller can open DupModal.
   const _runUpload = async (activePlan) => {
     const total = activePlan.reduce((s, p) => s + p.rows.length, 0);
-    if (total === 0) return;
+    if (total === 0) return [];
 
     setUpState({ done: 0, total, catLabel: "", record: "", pct: 0 });
     setStep("uploading");
 
-    const finals   = [];
-    const allFails = [];
+    const finals          = [];
+    const allFails        = [];
+    const allSkippedDups  = []; // collect { incoming, existing, catLabel, endpoint, fields }
     let done = 0;
 
     for (const p of activePlan) {
@@ -265,11 +274,22 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
 
         setUpState((prev) => ({ ...prev, catLabel: p.catLabel, record: firstRecord }));
 
-        const { success, failed, skipped = 0, errors: batchErrors } = await uploadBatch(p.endpoint, batch, p.fields);
+        const { success, failed, skipped = 0, skippedDetails = [], errors: batchErrors } =
+          await uploadBatch(p.endpoint, batch, p.fields);
 
         catSuccess += success;
         catFailed  += failed;
         catSkipped += skipped;
+
+        // Enrich skipped records with category context for the DupModal
+        skippedDetails.forEach((d) => {
+          allSkippedDups.push({
+            ...d,
+            catLabel: p.catLabel,
+            endpoint: p.endpoint,
+            fields:   p.fields,
+          });
+        });
 
         if (batchErrors.length) {
           allFails.push(...batchErrors.map((e) => ({ category: p.catLabel, ...e })));
@@ -308,8 +328,10 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     const tk = finals.reduce((s, r) => s + (r.skipped ?? 0), 0);
 
     if (ts > 0) { onUploaded(); toast.success(`${ts} records imported successfully!`); }
-    else if (tk > 0) toast(`All ${tk} records are already in the database — nothing new to import.`, { icon: "⚠️" });
+    else if (tk > 0) toast(`All ${tk} records are already in the database — use "Review Duplicates" to merge or insert them.`, { icon: "⚠️" });
     if (tf > 0) toast.error(`${tf} records failed — see details below.`);
+
+    return allSkippedDups;
   };
 
   const handleDupDone = async (processedCount) => {
@@ -317,24 +339,33 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     if (processedCount > 0) onUploaded();
 
     if (cleanPlan.length > 0) {
-      // Upload the clean (non-duplicate) rows now that user has reviewed dups
-      await _runUpload(cleanPlan);
+      // Preflight path: upload clean rows after user reviewed duplicates
+      const moreSkipped = await _runUpload(cleanPlan);
+      // If the clean-row upload also produced skipped duplicates, show modal again
+      if (moreSkipped.length > 0) {
+        setAllDuplicates(moreSkipped);
+        setCleanPlan([]);
+        setStep("dup-review");
+        setDupModalOpen(true);
+      }
     } else {
-      // All records were duplicates — compose the done screen from dup counts
-      const catGroups = {};
-      for (const d of allDuplicates) {
-        const key = d.catLabel || "Centres";
-        if (!catGroups[key]) catGroups[key] = { catLabel: key, accent: "#8b5cf6", success: 0, failed: 0, skipped: 0 };
-        catGroups[key].skipped++;
+      // Post-upload path or all-duplicate path: compose done screen
+      if (step !== "done") {
+        const catGroups = {};
+        for (const d of allDuplicates) {
+          const key = d.catLabel || "Centres";
+          if (!catGroups[key]) catGroups[key] = { catLabel: key, accent: "#8b5cf6", success: 0, failed: 0, skipped: 0 };
+          catGroups[key].skipped++;
+        }
+        const firstCat = Object.values(catGroups)[0];
+        if (firstCat) {
+          firstCat.skipped = Math.max(0, firstCat.skipped - processedCount);
+          firstCat.success = processedCount;
+        }
+        setResults(Object.values(catGroups));
+        setStep("done");
       }
-      // processedCount items were inserted/merged rather than skipped
-      const firstCat = Object.values(catGroups)[0];
-      if (firstCat) {
-        firstCat.skipped   = Math.max(0, firstCat.skipped - processedCount);
-        firstCat.success   = processedCount;
-      }
-      setResults(Object.values(catGroups));
-      setStep("done");
+      // If step is already "done" (post-upload path), results are already set
     }
   };
 
@@ -722,6 +753,18 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
                       ))}
                     </div>
                   </details>
+                )}
+
+                {allDuplicates.length > 0 && !dupModalOpen && (
+                  <button
+                    onClick={() => { setStep("dup-review"); setDupModalOpen(true); }}
+                    className="w-full py-2.5 rounded-lg text-sm font-semibold border-2 border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    Review {allDuplicates.length} Duplicate{allDuplicates.length !== 1 ? "s" : ""} — Merge or Insert
+                  </button>
                 )}
 
                 <button

@@ -354,18 +354,22 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
 
   let skippedDbDuplicates = 0;
   const duplicateKeys     = new Set();
+  const existingDocMap    = new Map(); // key → existing DB doc (with _id for merge)
 
   if (orConditions.length > 0) {
     const existingDocs = await Organisation.find({ $or: orConditions })
-      .select("centreName pincode")
+      .select("_id centreName centreType pincode city district state")
       .lean();
     existingDocs.forEach((doc) => {
-      duplicateKeys.add(`${doc.centreName.toLowerCase().trim()}___${doc.pincode}`);
+      const key = `${doc.centreName.toLowerCase().trim()}___${doc.pincode}`;
+      duplicateKeys.add(key);
+      existingDocMap.set(key, doc);
     });
   }
 
   let placeholderNinAin = 0;
   let placeholderEmail  = 0;
+  const skippedDetails  = []; // { incoming, existing } pairs for frontend review modal
 
   const sanitised = deduplicatedRecords
     .map((r) => {
@@ -377,6 +381,8 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
 
       if (!r.forceInsert && duplicateKeys.has(key)) {
         skippedDbDuplicates++;
+        const existingDoc = existingDocMap.get(key);
+        if (existingDoc) skippedDetails.push({ incoming: r, existing: existingDoc });
         return null;
       }
 
@@ -436,6 +442,7 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "No new records to import — all are duplicates.", {
       inserted: 0, failed: 0,
       skippedDuplicates, skippedIntraBatch, skippedDbDuplicates,
+      skippedDetails,
       total: records.length,
     });
   }
@@ -450,6 +457,7 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       inserted:           result.length,
       failed:             sanitised.length - result.length,
       skippedDuplicates, skippedIntraBatch, skippedDbDuplicates,
+      skippedDetails,
       placeholderNinAin, placeholderEmail,
       total:              records.length,
     });
@@ -469,6 +477,7 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
         message:  `${inserted} imported, ${failed} failed, ${skippedDuplicates} skipped (duplicates).`,
         inserted, failed,
         skippedDuplicates, skippedIntraBatch, skippedDbDuplicates,
+        skippedDetails,
         placeholderNinAin, placeholderEmail,
         total:  records.length,
         errors: writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
