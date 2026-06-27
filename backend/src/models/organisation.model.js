@@ -241,14 +241,15 @@ organisationSchema.pre("updateOne", async function () {
 });
 
 // ── Indexes ───────────────────────────────────────────────────────────────────
-// Unique guard — same centre name at same pincode is always a duplicate,
-// regardless of centreType.  Case-insensitive via collation strength 2.
-// MIGRATION NOTE: if upgrading from the old (name+type+pin) index, run:
-//   db.organisations.dropIndex("centreName_1_centreType_1_pincode_1")
-// before deploying, so Mongoose can build this new index cleanly.
+// Performance index on centreName+pincode (case-insensitive via collation strength 2).
+// Uniqueness is enforced at the APPLICATION level in createOrganisation and
+// bulkCreateOrganisations, which allows authorised forceInsert overrides.
+// MIGRATION: run in Atlas shell before deploying:
+//   db.organisations.dropIndex("centreName_1_pincode_1")
+// Mongoose will recreate it as a non-unique index on next server start.
 organisationSchema.index(
   { centreName: 1, pincode: 1 },
-  { unique: true, collation: { locale: "en", strength: 2 } }
+  { collation: { locale: "en", strength: 2 } }
 );
 organisationSchema.index({ centreName: "text", city: "text", district: "text" });
 organisationSchema.index({ centreType: 1 });

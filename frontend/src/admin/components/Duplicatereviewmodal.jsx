@@ -43,61 +43,85 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
     const toMerge  = duplicates.filter((_, i) => actions[i] === ACTION_MERGE);
 
     if (toInsert.length === 0 && toMerge.length === 0) {
-      onClose();
+      onDone(0);
       return;
     }
 
     setLoading(true);
     let totalProcessed = 0;
     let totalFailed    = 0;
+    const failedNames  = [];
 
-    // ── Force-inserts (grouped by endpoint for bulk) ──────────────────────
+    // ── Force-inserts grouped by endpoint ────────────────────────────────
     if (toInsert.length > 0) {
       const byEndpoint = {};
       for (const d of toInsert) {
         if (!byEndpoint[d.endpoint]) byEndpoint[d.endpoint] = [];
         byEndpoint[d.endpoint].push(d);
       }
+
       for (const [endpoint, items] of Object.entries(byEndpoint)) {
         const payloads = items.map((d) => ({
           ...buildPayload(d.incoming, d.fields),
           forceInsert: true,
         }));
+
         try {
-          const res = await axios.post(`${endpoint}/bulk`, { records: payloads });
-          totalProcessed += res.data?.inserted ?? payloads.length;
-        } catch {
-          for (const payload of payloads) {
-            try {
-              await axios.post(endpoint, payload);
-              totalProcessed++;
-            } catch {
-              totalFailed++;
+          const res  = await axios.post(`${endpoint}/bulk`, { records: payloads });
+          const data = res.data?.data ?? res.data ?? {};
+          totalProcessed += data.inserted ?? payloads.length;
+          if (data.failed > 0) totalFailed += data.failed;
+        } catch (bulkErr) {
+          if (bulkErr?.response?.status === 207) {
+            const data = bulkErr.response.data ?? {};
+            totalProcessed += data.inserted ?? 0;
+            totalFailed    += data.failed    ?? 0;
+          } else {
+            // Sequential fallback with per-record error names
+            for (let i = 0; i < payloads.length; i++) {
+              try {
+                await axios.post(endpoint, payloads[i]);
+                totalProcessed++;
+              } catch (singleErr) {
+                totalFailed++;
+                const name = items[i]?.incoming?.centreName || items[i]?.incoming?.name || `Record ${i + 1}`;
+                const msg  = singleErr?.response?.data?.message || singleErr?.message || "unknown error";
+                failedNames.push(`${name}: ${msg}`);
+              }
             }
           }
         }
       }
     }
 
-    // ── Merges (one request per record using existing._id) ────────────────
+    // ── Merges (one per record, using existing._id) ───────────────────────
     for (const d of toMerge) {
       const existingId = d.existing?._id;
-      if (!existingId) { totalFailed++; continue; }
+      const name = d.incoming?.centreName || d.incoming?.name || "Record";
+      if (!existingId) {
+        totalFailed++;
+        failedNames.push(`${name}: existing record ID missing`);
+        continue;
+      }
       try {
         const payload = buildPayload(d.incoming, d.fields);
         await axios.post(`${d.endpoint}/${existingId}/merge`, payload);
         totalProcessed++;
-      } catch {
+      } catch (err) {
         totalFailed++;
+        const msg = err?.response?.data?.message || err?.message || "merge failed";
+        failedNames.push(`${name}: ${msg}`);
       }
     }
 
     setLoading(false);
 
     if (totalProcessed > 0)
-      toast.success(`${totalProcessed} record${totalProcessed > 1 ? "s" : ""} processed.`);
-    if (totalFailed > 0)
-      toast.error(`${totalFailed} record${totalFailed > 1 ? "s" : ""} failed.`);
+      toast.success(`${totalProcessed} record${totalProcessed !== 1 ? "s" : ""} processed successfully.`);
+    if (totalFailed > 0) {
+      toast.error(`${totalFailed} record${totalFailed !== 1 ? "s" : ""} failed.`);
+      failedNames.slice(0, 3).forEach((m) => console.error("[DupModal]", m));
+    }
 
     onDone(totalProcessed);
   };

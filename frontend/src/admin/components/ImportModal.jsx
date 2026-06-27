@@ -321,15 +321,21 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     });
 
     setFailLog((prev) => [...prev, ...allFails]);
-    setStep("done");
 
     const ts = finals.reduce((s, r) => s + r.success, 0);
     const tf = finals.reduce((s, r) => s + r.failed,  0);
     const tk = finals.reduce((s, r) => s + (r.skipped ?? 0), 0);
 
-    if (ts > 0) { onUploaded(); toast.success(`${ts} records imported successfully!`); }
-    else if (tk > 0) toast(`All ${tk} records are already in the database — use "Review Duplicates" to merge or insert them.`, { icon: "⚠️" });
-    if (tf > 0) toast.error(`${tf} records failed — see details below.`);
+    // Only finalize "done" if there are no skipped dups — caller will set "dup-review" instead
+    if (allSkippedDups.length === 0) {
+      setStep("done");
+      if (ts > 0) { onUploaded(); toast.success(`${ts} records imported successfully!`); }
+      else if (tk > 0) toast(`All ${tk} records are already in the database.`, { icon: "⚠️" });
+      if (tf > 0) toast.error(`${tf} records failed — see details below.`);
+    } else {
+      if (ts > 0) { onUploaded(); toast.success(`${ts} records imported. ${allSkippedDups.length} duplicates need review.`); }
+      if (tf > 0) toast.error(`${tf} records failed — see details below.`);
+    }
 
     return allSkippedDups;
   };
@@ -349,12 +355,21 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
         setDupModalOpen(true);
       }
     } else {
-      // Post-upload path or all-duplicate path: compose done screen
-      if (step !== "done") {
+      setResults((prev) => {
+        if (prev.length > 0) {
+          // Post-upload path: results already set by _runUpload — update skipped/success counts
+          return prev.map((r) => ({
+            ...r,
+            skipped: Math.max(0, (r.skipped ?? 0) - processedCount),
+            success: (r.success ?? 0) + processedCount,
+          }));
+        }
+        // Preflight all-duplicates path: build results from allDuplicates list
         const catGroups = {};
         for (const d of allDuplicates) {
           const key = d.catLabel || "Centres";
-          if (!catGroups[key]) catGroups[key] = { catLabel: key, accent: "#8b5cf6", success: 0, failed: 0, skipped: 0 };
+          if (!catGroups[key])
+            catGroups[key] = { catLabel: key, accent: "#8b5cf6", success: 0, failed: 0, skipped: 0 };
           catGroups[key].skipped++;
         }
         const firstCat = Object.values(catGroups)[0];
@@ -362,10 +377,9 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
           firstCat.skipped = Math.max(0, firstCat.skipped - processedCount);
           firstCat.success = processedCount;
         }
-        setResults(Object.values(catGroups));
-        setStep("done");
-      }
-      // If step is already "done" (post-upload path), results are already set
+        return Object.values(catGroups);
+      });
+      setStep("done");
     }
   };
 
@@ -375,7 +389,7 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
         <div
           className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-          onClick={step !== "uploading" && step !== "checking" && step !== "dup-review" ? onClose : undefined}
+          onClick={step !== "uploading" && step !== "checking" && !(step === "dup-review" && dupModalOpen) ? onClose : undefined}
         />
         <div className="relative w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
 
@@ -387,7 +401,7 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
               </svg>
               Import Data
             </h3>
-            {step !== "uploading" && step !== "checking" && step !== "dup-review" && (
+            {step !== "uploading" && step !== "checking" && !(step === "dup-review" && dupModalOpen) && (
               <button
                 onClick={onClose}
                 className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
@@ -547,18 +561,43 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
 
             {/* ── STEP: dup-review ─────────────────────────────────────────── */}
             {step === "dup-review" && (
-              <div className="py-6 flex flex-col items-center gap-4 text-center">
-                <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                  </svg>
+              <div className="py-5 space-y-4">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-slate-800 font-bold text-sm">
+                      {allDuplicates.length} Duplicate{allDuplicates.length !== 1 ? "s" : ""} Found
+                    </p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      {dupModalOpen
+                        ? "Review the panel above — choose Skip, Merge, or Insert for each record."
+                        : "Choose what to do with the duplicate records."}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-slate-800 font-bold text-sm">Duplicates Found</p>
-                  <p className="text-slate-400 text-xs mt-1">
-                    Review the panel above — choose Skip, Merge, or Insert for each record.
-                  </p>
-                </div>
+
+                {/* Action buttons — only shown when DupModal is closed (user hit Cancel) */}
+                {!dupModalOpen && (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleDupDone(0)}
+                      className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-700 transition-all"
+                    >
+                      Skip All Duplicates
+                    </button>
+                    <button
+                      onClick={() => setDupModalOpen(true)}
+                      className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
+                      style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", boxShadow: "0 4px 15px rgba(245,158,11,0.25)" }}
+                    >
+                      Review {allDuplicates.length} Duplicate{allDuplicates.length !== 1 ? "s" : ""}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
