@@ -147,7 +147,8 @@ router.get(
 
 router.post(
   "/bulk/check-duplicates",
-  requireRole("full_admin", "admin"),
+  checkModuleAccess("organisation"),
+  checkActionAccess("view"),
   bulkCheckDuplicates,
 );
 

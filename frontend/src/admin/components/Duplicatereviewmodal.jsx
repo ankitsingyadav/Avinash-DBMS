@@ -168,9 +168,9 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
             const inc    = d.incoming;
             const ex     = d.existing;
 
-            const borderColor =
-              action === ACTION_INSERT ? "#6366f130" :
-              action === ACTION_MERGE  ? "#10b98130" : "#1e293b";
+            const borderVal =
+              action === ACTION_INSERT ? "1px solid #6366f130" :
+              action === ACTION_MERGE  ? "1px solid #10b98130" : "1px solid #1e293b";
             const bgColor =
               action === ACTION_INSERT ? "#6366f108" :
               action === ACTION_MERGE  ? "#10b98108" : "#0f172a";
@@ -178,8 +178,8 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
             return (
               <div
                 key={i}
-                className="rounded-xl border transition-all"
-                style={{ borderColor, background: bgColor }}
+                className="rounded-xl transition-all"
+                style={{ border: borderVal, background: bgColor }}
               >
                 {/* Info row */}
                 <div className="flex items-start gap-3 px-4 pt-3 pb-2">

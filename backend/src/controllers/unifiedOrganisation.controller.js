@@ -272,7 +272,7 @@ export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
   }
 
   const existingDocs = await Organisation.find({ $or: orConditions })
-    .select("centreName centreType pincode city district state")
+    .select("_id centreName centreType pincode city district state")
     .lean();
 
   const existingMap = new Map();
@@ -564,13 +564,18 @@ export const lookupByPincode = asyncHandler(async (req, res) => {
   if (!pin || pin.length !== 6)
     return sendError(res, 422, "A valid 6-digit pincode is required.");
 
+  const PINCODE_LIMIT = 50;
   const orgs = await Organisation.find({ pincode: pin })
     .select("_id centreName centreType city district state pincode")
-    .limit(20)
+    .limit(PINCODE_LIMIT + 1)
     .lean();
+
+  const truncated = orgs.length > PINCODE_LIMIT;
+  if (truncated) orgs.pop();
 
   return sendSuccess(res, 200, "Pincode lookup completed.", {
     count:         orgs.length,
+    truncated,
     organisations: orgs,
   });
 });
@@ -597,7 +602,9 @@ export const mergeOrganisations = asyncHandler(async (req, res) => {
   const newContacts = (Array.isArray(incoming.contacts) ? incoming.contacts : []).filter((c) => {
     const email = (c.email || "").toLowerCase().trim();
     const phone = (c.contactNumber || "").trim();
-    return email && !existingEmails.has(email) && !existingPhones.has(phone);
+    const emailDup = email && existingEmails.has(email);
+    const phoneDup = phone && existingPhones.has(phone);
+    return (email || phone) && !emailDup && !phoneDup;
   });
 
   if (newContacts.length > 0) pushOps.contacts = { $each: newContacts };
@@ -630,10 +637,19 @@ export const mergeOrganisations = asyncHandler(async (req, res) => {
     });
   }
 
-  const updated = await Organisation.findByIdAndUpdate(id, updateOps, {
-    new:            true,
-    runValidators:  false,
-  });
+  let updated;
+  try {
+    updated = await Organisation.findByIdAndUpdate(id, updateOps, {
+      new:            true,
+      runValidators:  false,
+    });
+  } catch (err) {
+    if (err.name === "ValidationError")
+      return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
+    throw err;
+  }
+
+  if (!updated) return sendError(res, 404, "Organisation not found after update.");
 
   return sendSuccess(res, 200, "Records merged successfully.", {
     organisation:    updated,

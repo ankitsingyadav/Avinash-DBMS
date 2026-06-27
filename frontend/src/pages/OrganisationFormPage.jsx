@@ -147,7 +147,7 @@ const organisationSchema = z.object({
     interactionDate:     z.string().min(1, "Interaction date is required"),
     interactionMode:     z.enum(["Email", "Phone", "WhatsApp", "Visit"], {
       errorMap: () => ({ message: "Please select a valid interaction mode" }),
-    }),
+    }).optional().or(z.literal("")),
     // NEW: interaction-level status
     interactionStatus:   z.enum(
       ["Pending", "Progressive", "Active", "Inactive", "Initiated"],
@@ -177,7 +177,7 @@ const DEFAULT_VALUES = {
     interactionBy:       "",
     interactedWith:      "",
     interactionDate:     "",
-    interactionMode:     "",
+    interactionMode:     undefined,
     interactionStatus:   "Initiated",   // NEW default
     notes:               "",
     ninAin:              "",
@@ -275,7 +275,7 @@ function DuplicateBanner({ message, onDismiss }) {
 }
 
 // ─── Pincode pre-check panel (shown when existing orgs share the entered pincode)
-function PincodeMatchesPanel({ orgs, onDismiss }) {
+function PincodeMatchesPanel({ orgs, truncated, onDismiss }) {
   if (!orgs || orgs.length === 0) return null;
   return (
     <div
@@ -290,7 +290,7 @@ function PincodeMatchesPanel({ orgs, onDismiss }) {
             </svg>
           </span>
           <p className="text-xs font-semibold text-amber-800">
-            {orgs.length} organisation{orgs.length > 1 ? "s" : ""} already registered at this pincode — verify before submitting.
+            {orgs.length}{truncated ? "+" : ""} organisation{orgs.length !== 1 ? "s" : ""} already registered at this pincode — verify before submitting.
           </p>
         </div>
         <button
@@ -314,6 +314,11 @@ function PincodeMatchesPanel({ orgs, onDismiss }) {
             </span>
           </li>
         ))}
+        {truncated && (
+          <li className="text-xs text-amber-500 italic pl-3.5">
+            … and more. Search the dashboard by pincode to see all.
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -361,6 +366,7 @@ const OrganisationFormPage = () => {
 
   // Pincode pre-check state
   const [pincodeOrgs,       setPincodeOrgs]       = useState([]);
+  const [pincodeTruncated,  setPincodeTruncated]  = useState(false);
   const [pincodeDismissed,  setPincodeDismissed]  = useState(false);
   const pincodeDebounceRef  = useRef(null);
 
@@ -410,6 +416,7 @@ const OrganisationFormPage = () => {
     const pin = String(watchedPincode || "").trim();
     if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
       setPincodeOrgs([]);
+      setPincodeTruncated(false);
       setPincodeDismissed(false);
       return;
     }
@@ -417,6 +424,7 @@ const OrganisationFormPage = () => {
       try {
         const res = await axios.get(`/organisations/lookup/pincode?pincode=${pin}`);
         setPincodeOrgs(res.data?.data?.organisations ?? []);
+        setPincodeTruncated(res.data?.data?.truncated ?? false);
         setPincodeDismissed(false);
       } catch (err) {
         console.warn("[PincodeLookup] Failed:", err?.response?.status, err?.response?.data ?? err?.message);
@@ -643,6 +651,7 @@ const OrganisationFormPage = () => {
               {!pincodeDismissed && (
                 <PincodeMatchesPanel
                   orgs={pincodeOrgs}
+                  truncated={pincodeTruncated}
                   onDismiss={() => setPincodeDismissed(true)}
                 />
               )}
@@ -988,7 +997,7 @@ const OrganisationFormPage = () => {
               </FormField>
 
               <FormField
-                label="Interaction Mode *"
+                label="Planned Interaction Mode"
                 error={errors.interaction?.interactionMode?.message}
               >
                 <select

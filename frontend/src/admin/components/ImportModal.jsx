@@ -29,7 +29,11 @@ async function uploadBatch(endpoint, batch, fields) {
         success: data.inserted          ?? 0,
         failed:  data.failed            ?? 0,
         skipped: data.skippedDuplicates ?? 0,
-        errors:  (data.errors ?? []).map((e) => ({ rowIndex: e.index, message: e.message })),
+        errors:  (data.errors ?? []).map((e) => ({
+          rowIndex: e.index,
+          row:      batch[e.index] ?? {},
+          message:  e.message,
+        })),
       };
     }
 
@@ -111,7 +115,10 @@ async function preflight(p) {
 
     return { clean, duplicates: enriched, intraBatchCount: intraBatch.length };
   } catch (err) {
-    console.warn("[Import] Pre-flight check failed, skipping dedup:", err?.response?.data ?? err.message);
+    const status = err?.response?.status;
+    const msg    = err?.response?.data?.message ?? err?.message ?? "network error";
+    console.error(`[Import] Pre-flight FAILED (HTTP ${status ?? "?"}) — ${msg}`, err?.response?.data);
+    toast.error(`Duplicate pre-check failed (HTTP ${status ?? "?"}) — ${msg}`, { duration: 6000 });
     return { clean: p.rows, duplicates: [] };
   }
 }
