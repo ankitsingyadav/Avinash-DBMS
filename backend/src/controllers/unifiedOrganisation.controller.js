@@ -15,6 +15,8 @@ import {
 const BULK_LIMIT   = 500;
 const VALID_MODES  = ["Email", "Phone", "WhatsApp", "Visit"];
 
+const VALID_INTERACTION_STATUSES = ["Pending", "Progressive", "Active", "Inactive", "Initiated"];
+
 const SORT_WHITELIST = new Set([
   "centreName", "city", "district", "state",
   "status", "centreType", "createdAt", "updatedAt",
@@ -24,7 +26,7 @@ const VALID_DATA_STATUSES = ["Basic", "Partial", "Complete"];
 const LEGACY_STATUS_MAP   = { Active: "Complete", Inactive: "Basic" };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PURE HELPERS  (no DB calls — safe to use anywhere)
+// PURE HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const buildSort = (sortField = "createdAt", sortDir = "desc") => {
@@ -32,14 +34,12 @@ const buildSort = (sortField = "createdAt", sortDir = "desc") => {
   return { [field]: sortDir === "asc" ? 1 : -1 };
 };
 
-/** Strip protocol-less URLs and empty values → always return a valid https URL */
 const normaliseWebsite = (v) => {
   const s = String(v || "").trim();
   if (!s) return "https://example.com";
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 };
 
-/** Remove non-digits, strip trailing ".0" from Excel floats, clamp to 6 chars */
 const normalisePincode = (v) =>
   String(v || "")
     .trim()
@@ -47,7 +47,6 @@ const normalisePincode = (v) =>
     .replace(/\D/g, "")
     .slice(0, 6);
 
-/** Validate email; return a deterministic placeholder on failure */
 const normaliseEmail = (raw, fallbackSlug = "record") => {
   const e = String(raw || "").trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
@@ -55,14 +54,12 @@ const normaliseEmail = (raw, fallbackSlug = "record") => {
     : `import-${fallbackSlug.replace(/[^a-z0-9]/g, "-").slice(0, 24)}@noreply.example.com`;
 };
 
-/** Map old Active/Inactive → new tri-state; default to "Basic" */
 const normaliseDataStatus = (raw) => {
   if (!raw) return "Basic";
   if (VALID_DATA_STATUSES.includes(raw)) return raw;
   return LEGACY_STATUS_MAP[raw] ?? "Basic";
 };
 
-/** Escape special regex chars in user-supplied strings */
 const escapeRegex = (str) =>
   String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -71,12 +68,15 @@ const escapeRegex = (str) =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Safely merge a dataScope $or clause with a search $or clause.
- * Using $and avoids illegal top-level $or + $or collision in MongoDB.
+ * Safely merge dataScope $or + searchOr + extraFilters.
+ * $expr is extracted separately to avoid collision with $and/$or.
  */
 const buildQuery = (dataScope = {}, dateScope = {}, searchOr = null, extraFilters = {}) => {
-  const query    = { ...dateScope, ...extraFilters };
-  const ownerOr  = dataScope?.$or ?? null;
+  // $expr ko alag nikalo taaki $and/$or se conflict na ho
+  const { $expr, ...restFilters } = extraFilters;
+
+  const query   = { ...dateScope, ...restFilters };
+  const ownerOr = dataScope?.$or ?? null;
 
   if (ownerOr && searchOr) {
     query.$and = [{ $or: ownerOr }, { $or: searchOr }];
@@ -86,16 +86,14 @@ const buildQuery = (dataScope = {}, dateScope = {}, searchOr = null, extraFilter
     query.$or = searchOr;
   }
 
+  // $expr safely add karo — latest interaction status filter ke liye
+  if ($expr) query.$expr = $expr;
+
   return query;
 };
 
 /**
  * Build a single interaction sub-document from a flat request body / import row.
- * All fields are coerced to safe types; unknowns are dropped silently.
- *
- * NEW: nextNotes is now passed through — independent notes field for the
- * "next interaction planned" block (separate from `notes`, which belongs
- * to the current interaction).
  */
 const buildInteractionFromBody = (interaction = {}) => ({
   interactionBy:   String(interaction.interactionBy  || "").trim(),
@@ -106,17 +104,19 @@ const buildInteractionFromBody = (interaction = {}) => ({
   interactionMode: VALID_MODES.includes(interaction.interactionMode)
     ? interaction.interactionMode
     : "Email",
-  notes:               interaction.notes?.trim()              || undefined,
-  ninAin:              interaction.ninAin?.trim()             || undefined,
+  interactionStatus: VALID_INTERACTION_STATUSES.includes(interaction.interactionStatus)
+    ? interaction.interactionStatus
+    : "Initiated",
+  notes:               interaction.notes?.trim()     || undefined,
+  ninAin:              interaction.ninAin?.trim()    || undefined,
   nextInteractionDate: interaction.nextInteractionDate
     ? new Date(interaction.nextInteractionDate)
     : undefined,
-  nextNotes:           interaction.nextNotes?.trim()          || undefined,
+  nextNotes:           interaction.nextNotes?.trim() || undefined,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/organisations
-// Create a single organisation with its first interaction
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const createOrganisation = asyncHandler(async (req, res) => {
@@ -126,7 +126,6 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     contacts, onboardedBy, ninAin, interaction,
   } = req.body;
 
-  // ── Required-field gate ────────────────────────────────────────────────────
   if (
     !centreType || !centreName || !address || !city ||
     !district   || !state     || !pincode || !contacts || !onboardedBy || !interaction
@@ -140,7 +139,11 @@ export const createOrganisation = asyncHandler(async (req, res) => {
   if (!Array.isArray(contacts) || contacts.length === 0)
     return sendError(res, 422, "Contacts must be a non-empty array.");
 
-  // ── partial_admin centreType access gate ───────────────────────────────────
+  const contactEmails = contacts.map((c) => (c.email || "").toLowerCase().trim()).filter(Boolean);
+  if (contactEmails.length !== new Set(contactEmails).size) {
+    return sendError(res, 422, "Duplicate email addresses found in contacts. Each contact must have a unique email.");
+  }
+
   if (req.user.role === "partial_admin") {
     const mods = req.user.permissions?.allowedModules ?? [];
     const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
@@ -155,7 +158,6 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     }
   }
 
-  // ── Duplicate check (centreName + pincode — centreType-agnostic) ─────────
   const normalisedPincode = normalisePincode(pincode);
 
   const duplicate = await Organisation.findOne({
@@ -177,7 +179,6 @@ export const createOrganisation = asyncHandler(async (req, res) => {
     );
   }
 
-  // ── Persist ────────────────────────────────────────────────────────────────
   const finalDistrict = district && String(district).trim()
     ? String(district).trim()
     : String(city).trim();
@@ -203,7 +204,7 @@ export const createOrganisation = asyncHandler(async (req, res) => {
       }),
       interactions: [buildInteractionFromBody(interaction)],
       onboardedBy:  String(onboardedBy).trim(),
-      ninAin:       ninAin?.trim()  || undefined,
+      ninAin:       ninAin?.trim() || undefined,
       registeredBy: req.user._id,
       status:       normaliseDataStatus(req.body.status),
     });
@@ -222,10 +223,6 @@ export const createOrganisation = asyncHandler(async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/organisations/bulk/check-duplicates
-//
-// Accepts up to BULK_LIMIT incoming records and returns which ones already
-// exist in the DB (matched on centreName + centreType + pincode, case-insensitive).
-// This is a READ-ONLY pre-flight — nothing is written.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
@@ -237,14 +234,13 @@ export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
   if (records.length > BULK_LIMIT)
     return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
 
-  // ── Step 1: Intra-batch duplicates (same centreName + pincode within the file) ──
-  const seenInBatch  = new Map();   // key → first occurrence index
-  const intraBatch   = [];          // { index, incoming, duplicateOfIndex }
+  const seenInBatch = new Map();
+  const intraBatch  = [];
 
   records.forEach((r, index) => {
     const name = String(r.centreName || "").trim().toLowerCase();
     const pin  = normalisePincode(r.pincode);
-    if (!name || !pin) return;      // incomplete rows — skip dedupe check
+    if (!name || !pin) return;
 
     const key = `${name}___${pin}`;
     if (seenInBatch.has(key)) {
@@ -254,7 +250,6 @@ export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
     }
   });
 
-  // ── Step 2: DB duplicates — check centreName + pincode only (no centreType) ──
   const orConditions = records
     .map((r) => {
       const name = String(r.centreName || "").trim();
@@ -269,35 +264,31 @@ export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
 
   if (orConditions.length === 0) {
     return sendSuccess(res, 200, "Duplicate check completed.", {
-      duplicates:  [],
+      duplicates: [],
       intraBatch,
-      cleanCount:  records.length,
-      total:       records.length,
+      cleanCount: records.length,
+      total:      records.length,
     });
   }
 
-  // Single DB round-trip covering every incoming row
   const existingDocs = await Organisation.find({ $or: orConditions })
     .select("centreName centreType pincode city district state")
     .lean();
 
-  // O(1) lookup: "name___pin" → existing doc
   const existingMap = new Map();
   existingDocs.forEach((doc) => {
     const key = `${doc.centreName.toLowerCase().trim()}___${doc.pincode}`;
     existingMap.set(key, doc);
   });
 
-  // Match every incoming record against the DB map
-  const dbDuplicates = [];
+  const dbDuplicates      = [];
   const intraBatchIndices = new Set(intraBatch.map((d) => d.index));
 
   records.forEach((r, index) => {
-    if (intraBatchIndices.has(index)) return; // already flagged as intra-batch dup
-    const name = String(r.centreName || "").trim().toLowerCase();
-    const pin  = normalisePincode(r.pincode);
-    const key  = `${name}___${pin}`;
-
+    if (intraBatchIndices.has(index)) return;
+    const name     = String(r.centreName || "").trim().toLowerCase();
+    const pin      = normalisePincode(r.pincode);
+    const key      = `${name}___${pin}`;
     const existDoc = existingMap.get(key);
     if (existDoc) {
       dbDuplicates.push({ index, incoming: r, existing: existDoc });
@@ -310,10 +301,10 @@ export const bulkCheckDuplicates = asyncHandler(async (req, res) => {
   ]);
 
   return sendSuccess(res, 200, "Duplicate check completed.", {
-    duplicates:  dbDuplicates,        // DB-level duplicates (for frontend modal)
-    intraBatch,                        // within-file duplicates
-    cleanCount:  records.length - allDuplicateIndices.size,
-    total:       records.length,
+    duplicates: dbDuplicates,
+    intraBatch,
+    cleanCount: records.length - allDuplicateIndices.size,
+    total:      records.length,
   });
 });
 
@@ -330,8 +321,6 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
   if (records.length > BULK_LIMIT)
     return sendError(res, 422, `Batch size exceeds the maximum limit of ${BULK_LIMIT} records.`);
 
-  // ── Stage 1: Remove intra-batch duplicates (same centreName + pincode in the file) ──
-  // This prevents two rows for the same centre from racing past the DB check.
   const seenInBatch         = new Set();
   let   skippedIntraBatch   = 0;
   const deduplicatedRecords = [];
@@ -349,7 +338,6 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
     }
   });
 
-  // ── Stage 2: DB pre-flight — centreName + pincode only (centreType-agnostic) ──
   const orConditions = deduplicatedRecords
     .map((r) => {
       const name = String(r.centreName || "").trim();
@@ -374,7 +362,6 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
     });
   }
 
-  // Track placeholder usage for transparency
   let placeholderNinAin = 0;
   let placeholderEmail  = 0;
 
@@ -386,14 +373,12 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       const pin  = normalisePincode(r.pincode);
       const key  = `${name.toLowerCase()}___${pin}`;
 
-      // Skip rows that already exist in the DB
       if (duplicateKeys.has(key)) {
         skippedDbDuplicates++;
         return null;
       }
 
-      const district = String(r.district || r.city || "Unknown District").trim();
-
+      const district   = String(r.district || r.city || "Unknown District").trim();
       const rawEmail   = String(r.email || "").trim().toLowerCase();
       const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail);
       if (!emailValid) placeholderEmail++;
@@ -422,9 +407,12 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
           interactedWith: String(
             r.interactedWith || r.contactPerson || r.name || r.centreName || "Administrator"
           ).trim(),
-          interactionDate: r.interactionDate ? new Date(r.interactionDate) : new Date(),
-          interactionMode: VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
-          notes:           String(r.notes || "Imported via bulk upload").trim(),
+          interactionDate:   r.interactionDate ? new Date(r.interactionDate) : new Date(),
+          interactionMode:   VALID_MODES.includes(r.interactionMode) ? r.interactionMode : "Email",
+          interactionStatus: VALID_INTERACTION_STATUSES.includes(r.interactionStatus)
+            ? r.interactionStatus
+            : "Initiated",
+          notes: String(r.notes || "Imported via bulk upload").trim(),
           ...(r.nextInteractionDate && !isNaN(new Date(r.nextInteractionDate))
             ? { nextInteractionDate: new Date(r.nextInteractionDate) }
             : {}),
@@ -444,12 +432,9 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
 
   if (sanitised.length === 0) {
     return sendSuccess(res, 200, "No new records to import — all are duplicates.", {
-      inserted:           0,
-      failed:             0,
-      skippedDuplicates,
-      skippedIntraBatch,
-      skippedDbDuplicates,
-      total:              records.length,
+      inserted: 0, failed: 0,
+      skippedDuplicates, skippedIntraBatch, skippedDbDuplicates,
+      total: records.length,
     });
   }
 
@@ -462,11 +447,8 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
     return sendSuccess(res, 201, "Bulk import completed.", {
       inserted:           result.length,
       failed:             sanitised.length - result.length,
-      skippedDuplicates,
-      skippedIntraBatch,
-      skippedDbDuplicates,
-      placeholderNinAin,
-      placeholderEmail,
+      skippedDuplicates, skippedIntraBatch, skippedDbDuplicates,
+      placeholderNinAin, placeholderEmail,
       total:              records.length,
     });
 
@@ -481,17 +463,13 @@ export const bulkCreateOrganisations = asyncHandler(async (req, res) => {
       );
 
       return res.status(207).json({
-        success:            true,
-        message:            `${inserted} imported, ${failed} failed, ${skippedDuplicates} skipped (duplicates).`,
-        inserted,
-        failed,
-        skippedDuplicates,
-        skippedIntraBatch,
-        skippedDbDuplicates,
-        placeholderNinAin,
-        placeholderEmail,
-        total:              records.length,
-        errors:             writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
+        success:  true,
+        message:  `${inserted} imported, ${failed} failed, ${skippedDuplicates} skipped (duplicates).`,
+        inserted, failed,
+        skippedDuplicates, skippedIntraBatch, skippedDbDuplicates,
+        placeholderNinAin, placeholderEmail,
+        total:  records.length,
+        errors: writeErrors.map((e) => ({ index: e.index, message: e.errmsg })),
       });
     }
 
@@ -517,16 +495,12 @@ export const addInteraction = asyncHandler(async (req, res) => {
   if (!VALID_MODES.includes(interactionMode))
     return sendError(res, 422, `Invalid interactionMode. Must be one of: ${VALID_MODES.join(", ")}.`);
 
-  // Fetch the org first (needed for ownership check + auto-mark-done logic)
   const org = await Organisation.findById(id);
   if (!org) return sendError(res, 404, "Organisation not found.");
 
-  // data_entry users may only edit their own records
   if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id))
     return sendError(res, 403, "You can only edit records you created.");
 
-  // Auto-mark previous interaction as done: clear nextInteractionDate on the
-  // last interaction so it disappears from the notifications bell/page.
   const prevIdx = org.interactions.length - 1;
   if (prevIdx >= 0 && org.interactions[prevIdx].nextInteractionDate) {
     await Organisation.updateOne(
@@ -571,7 +545,6 @@ export const getInteractions = asyncHandler(async (req, res) => {
 
   if (!organisation) return sendError(res, 404, "Organisation not found.");
 
-  // Return newest first (reverse of insertion order)
   const history = [...(organisation.interactions || [])].reverse();
 
   return sendSuccess(res, 200, "Interactions retrieved successfully.", {
@@ -618,7 +591,8 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
     page  = 1, limit = 12,
     search, sortField, sortDir,
     status, state, district, city, centreType,
-    ids,       // comma-separated list of org IDs — used by the "upcoming 48h" admin filter
+    interactionStatus,
+    ids,
   } = req.query;
 
   const dataScope = req._dataScope || {};
@@ -626,21 +600,17 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
 
   const extraFilters = {};
 
-  // Direct ID filter — bypasses pagination when fetching specific orgs (e.g. upcoming filter)
   if (ids) {
     const idList = String(ids).split(",").map((s) => s.trim()).filter(Boolean);
     if (idList.length > 0) extraFilters._id = { $in: idList };
   }
 
-  // partial_admin: restrict visible centreTypes to allowed modules
   if (req.user.role === "partial_admin") {
     const mods = req.user.permissions?.allowedModules ?? [];
     const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
     const allowedTypes = mods.filter((m) => CENTRE_TYPES.includes(m));
 
     if (allowedTypes.length > 0) {
-      // If the requested centreType filter is within their scope, honour it;
-      // otherwise restrict to everything they're allowed to see
       extraFilters.centreType = (centreType && allowedTypes.includes(centreType))
         ? centreType
         : { $in: allowedTypes };
@@ -655,6 +625,16 @@ export const getAllOrganisations = asyncHandler(async (req, res) => {
   if (state)    extraFilters.state    = state;
   if (district) extraFilters.district = district;
   if (city)     extraFilters.city     = city;
+
+  // ── Latest interaction status filter — $last se sirf latest match karo ──
+  if (interactionStatus && VALID_INTERACTION_STATUSES.includes(interactionStatus)) {
+    extraFilters.$expr = {
+      $eq: [
+        { $last: "$interactions.interactionStatus" },
+        interactionStatus,
+      ],
+    };
+  }
 
   let searchOr = null;
   if (search?.trim()) {
@@ -745,9 +725,17 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
   if (updates.website) updates.website = normaliseWebsite(updates.website);
   if (updates.status)  updates.status  = normaliseDataStatus(updates.status);
 
+  if (updates.contacts) {
+    const contactEmails = updates.contacts
+      .map((c) => (c.email || "").toLowerCase().trim())
+      .filter(Boolean);
+    if (contactEmails.length !== new Set(contactEmails).size) {
+      return sendError(res, 422, "Duplicate email addresses found in contacts.");
+    }
+  }
+
   const mongoUpdate = { $set: {} };
 
-  // An "interaction" in the update body appends a new interaction entry
   if (updates.interaction) {
     mongoUpdate.$push = { interactions: buildInteractionFromBody(updates.interaction) };
     delete updates.interaction;

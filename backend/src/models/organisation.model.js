@@ -58,7 +58,7 @@ const interactionSchema = new mongoose.Schema(
     nextInteractionDate: {
       type: Date,
     },
-    // ── NEW: notes specific to the next planned interaction ───────────────────
+    // Notes specific to the next planned interaction
     nextNotes: {
       type: String,
       trim: true,
@@ -70,6 +70,19 @@ const interactionSchema = new mongoose.Schema(
         values: ["Email", "Phone", "WhatsApp", "Visit"],
         message: "Invalid interaction mode: {VALUE}",
       },
+    },
+    // FIX: interactionStatus field added — was missing, causing silent data loss
+    interactionStatus: {
+      type: String,
+      enum: {
+        values: ["Pending", "Progressive", "Active", "Inactive", "Initiated"],
+        message: "Invalid interaction status: {VALUE}",
+      },
+      default: "Initiated",
+    },
+    ninAin: {
+      type: String,
+      trim: true,
     },
   },
   { timestamps: true }
@@ -137,6 +150,15 @@ const organisationSchema = new mongoose.Schema(
           validator: (v) => Array.isArray(v) && v.length <= 4,
           message: "Maximum 4 contact persons allowed",
         },
+        // FIX: intra-contact duplicate email check at model level
+        {
+          validator: function (v) {
+            if (!Array.isArray(v)) return true;
+            const emails = v.map((c) => (c.email || "").toLowerCase().trim());
+            return emails.length === new Set(emails).size;
+          },
+          message: "Duplicate email addresses found in contacts",
+        },
       ],
     },
 
@@ -166,7 +188,7 @@ const organisationSchema = new mongoose.Schema(
       required: true,
     },
 
-    // ── Data completion status (replaces Active/Inactive) ─────────────────────
+    // ── Data completion status ─────────────────────────────────────────────────
     status: {
       type: String,
       enum: {

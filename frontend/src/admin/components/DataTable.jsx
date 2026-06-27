@@ -1,10 +1,10 @@
 // ─── admin/components/DataTable.jsx  (LIGHT THEME) ───────────────────────────
 import { useState, useEffect, useRef } from "react";
 import { fmtDate, shortId } from "../helpers.js";
-import { DataStatusBadge, StatusBadge, TypeBadge, HighlightText } from "./ui.jsx";
+import { DataStatusBadge, StatusBadge, TypeBadge, HighlightText, InteractionStatusBadge } from "./ui.jsx";
 
 const DEFAULT_VISIBLE = {
-  organisation: new Set(["_id", "centreName", "phone", "email", "state", "status"]),
+organisation: new Set(["_id", "centreName", "state", "interactionStatus"]),
   volunteer:    new Set(["_id", "name", "phone", "email", "state", "area_of_interest", "status"]),
 };
 
@@ -53,8 +53,11 @@ export default function DataTable({
   const someSelected = allPageIds.some((id) => selectedIds.has(id)) && !allSelected;
   const showInteractionCol = category.id === "organisation";
 
-  const toggleableCols    = (category.columns ?? []).filter((c) => c.key !== "centreName" && c.key !== "name" && c.key !== "_id");
+  // ── "status" aur "interactionStatus" dono ab normal toggleable columns hain ──
   const alwaysVisibleKeys = new Set(["_id", "centreName", "name"]);
+  const toggleableCols    = (category.columns ?? []).filter(
+    (c) => !alwaysVisibleKeys.has(c.key)
+  );
 
   const toggleCol = (key) => {
     setVisibleCols((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -68,13 +71,22 @@ export default function DataTable({
 
   const getCellDisplay = (row, col) => {
     const v = row[col.key];
-    if (col.key === "_id")  return <span className="font-mono text-xs text-slate-400 select-all cursor-text">{shortId(v)}</span>;
-    if (col.isDataStatus)   return <DataStatusBadge value={v} />;
-    if (col.isStatus)       return <StatusBadge value={v} />;
-    if (col.badge)          return <TypeBadge value={v} accent={category.accent} />;
-    if (col.isDate)         return <span className="text-slate-500 text-xs whitespace-nowrap">{fmtDate(v)}</span>;
-    if (!v && v !== 0)      return <span className="text-slate-300">—</span>;
-    if (col.bold)           return <span className="text-slate-900 font-semibold text-sm"><HighlightText text={String(v)} query={search} /></span>;
+    if (col.key === "_id")             return <span className="font-mono text-xs text-slate-400 select-all cursor-text">{shortId(v)}</span>;
+    if (col.key === "status")          return <DataStatusBadge value={v} />;
+    if (col.key === "interactionStatus") {
+      // Latest interaction ka status dikhao
+      const interactions = row.interactions;
+      const latest = Array.isArray(interactions) && interactions.length > 0
+        ? interactions[interactions.length - 1]
+        : null;
+      return <InteractionStatusBadge value={latest?.interactionStatus} />;
+    }
+    if (col.isDataStatus)              return <DataStatusBadge value={v} />;
+    if (col.isStatus)                  return <StatusBadge value={v} />;
+    if (col.badge)                     return <TypeBadge value={v} accent={category.accent} />;
+    if (col.isDate)                    return <span className="text-slate-500 text-xs whitespace-nowrap">{fmtDate(v)}</span>;
+    if (!v && v !== 0)                 return <span className="text-slate-300">—</span>;
+    if (col.bold)                      return <span className="text-slate-900 font-semibold text-sm"><HighlightText text={String(v)} query={search} /></span>;
     return <span className="text-slate-600 text-sm"><HighlightText text={String(v)} query={search} /></span>;
   };
 
@@ -216,7 +228,7 @@ export default function DataTable({
               </th>
 
               {/* Always-visible cols */}
-              {activeCols.filter((c) => c.key === "_id" || c.key === "centreName" || c.key === "name").map((col) => (
+              {activeCols.filter((c) => alwaysVisibleKeys.has(c.key)).map((col) => (
                 <th key={col.key}
                   className={`px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap ${col.sortable ? "cursor-pointer hover:text-slate-700 select-none" : ""} transition-colors`}
                   style={{ minWidth: col.w }}
@@ -237,14 +249,14 @@ export default function DataTable({
                 </th>
               )}
 
-              {/* Rest */}
-              {activeCols.filter((c) => c.key !== "_id" && c.key !== "centreName" && c.key !== "name").map((col) => (
+              {/* Rest of toggleable cols */}
+              {activeCols.filter((c) => !alwaysVisibleKeys.has(c.key)).map((col) => (
                 <th key={col.key}
                   className={`px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap ${col.sortable ? "cursor-pointer hover:text-slate-700 select-none" : ""} transition-colors`}
                   style={{ minWidth: col.w }}
                   onClick={() => col.sortable && onSort(col.key)}>
                   <div className="flex items-center gap-1.5">
-                    {col.key === "status" ? "Data" : col.label}
+                    {col.label}
                     {col.sortable && <SortIcon field={col.key} />}
                   </div>
                 </th>
@@ -319,26 +331,24 @@ export default function DataTable({
                     </div>
                   </td>
 
-                  {activeCols.filter((c) => c.key === "_id" || c.key === "centreName" || c.key === "name").map((col) => (
+                  {/* Always-visible cols */}
+                  {activeCols.filter((c) => alwaysVisibleKeys.has(c.key)).map((col) => (
                     <td key={col.key} className="px-4 py-3 max-w-[220px]">
                       <div className="truncate">{getCellDisplay(row, col)}</div>
                     </td>
                   ))}
 
+                  {/* Interaction count col */}
                   {showInteractionCol && (
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <InteractionCell row={row} />
                     </td>
                   )}
 
-                  {activeCols.filter((c) => c.key !== "_id" && c.key !== "centreName" && c.key !== "name").map((col) => (
+                  {/* Toggleable cols */}
+                  {activeCols.filter((c) => !alwaysVisibleKeys.has(c.key)).map((col) => (
                     <td key={col.key} className="px-4 py-3 max-w-[220px]">
-                      <div className="truncate">
-                        {col.isStatus || col.key === "status"
-                          ? <DataStatusBadge value={row[col.key]} />
-                          : getCellDisplay(row, col)
-                        }
-                      </div>
+                      <div className="truncate">{getCellDisplay(row, col)}</div>
                     </td>
                   ))}
 

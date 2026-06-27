@@ -5,6 +5,9 @@
 //   7. NEW: "Interacted With" is now a dropdown sourced live from the contact
 //      persons added in Section 2 (by name), with a "+ Custom" option that
 //      switches to a free-text input when no matching contact exists
+//   8. NEW: "Status" dropdown added after NIN field in Interaction Remarks
+//      section — options: Pending, Progressive, Active, Inactive, Initiated
+//      Default: "Initiated"
 
 import React, { useState, useCallback, useEffect } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
@@ -19,6 +22,9 @@ import useAuthStore from "../context/authStore";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const INTERACTION_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
+
+// NEW: Interaction status options
+const INTERACTION_STATUSES = ["Pending", "Progressive", "Active", "Inactive", "Initiated"];
 
 const CENTRE_TYPES = [
   "School",
@@ -142,6 +148,11 @@ const organisationSchema = z.object({
     interactionMode:     z.enum(["Email", "Phone", "WhatsApp", "Visit"], {
       errorMap: () => ({ message: "Please select a valid interaction mode" }),
     }),
+    // NEW: interaction-level status
+    interactionStatus:   z.enum(
+      ["Pending", "Progressive", "Active", "Inactive", "Initiated"],
+      { errorMap: () => ({ message: "Please select a valid status" }) }
+    ).default("Initiated"),
     notes:               z.string().optional(),
     ninAin:              z.string().optional(),
     nextInteractionDate: z.string().optional(),
@@ -167,6 +178,7 @@ const DEFAULT_VALUES = {
     interactedWith:      "",
     interactionDate:     "",
     interactionMode:     "",
+    interactionStatus:   "Initiated",   // NEW default
     notes:               "",
     ninAin:              "",
     nextInteractionDate: "",
@@ -190,6 +202,15 @@ const SECTION_COLORS = {
   green:  { bar: "bg-emerald-500", title: "text-emerald-600" },
   violet: { bar: "bg-violet-500",  title: "text-violet-600"  },
   amber:  { bar: "bg-amber-500",   title: "text-amber-600"   },
+};
+
+// ─── Status badge color map (for visual hint inside dropdown label area) ──────
+const STATUS_COLORS = {
+  Pending:     "text-amber-600",
+  Progressive: "text-blue-600",
+  Active:      "text-emerald-600",
+  Inactive:    "text-slate-500",
+  Initiated:   "text-violet-600",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -293,7 +314,7 @@ const OrganisationFormPage = () => {
   const [formData,          setFormData]          = useState(null);
   const [duplicateMsg,      setDuplicateMsg]      = useState("");
 
-  // NEW: toggles "Interacted With" between dropdown-of-contacts and free text
+  // toggles "Interacted With" between dropdown-of-contacts and free text
   const [interactedWithCustom, setInteractedWithCustom] = useState(false);
 
   useEffect(() => {
@@ -320,8 +341,7 @@ const OrganisationFormPage = () => {
   });
 
   // ── Default "Onboarded By" / "AIN-NIN" / "Interaction By" from logged-in user
-  // All three remain fully editable — only the *initial* value is set here.
-   useEffect(() => {
+  useEffect(() => {
     if (!user) return;
     if (user.fullName) {
       setValue("onboardedBy", user.fullName, { shouldValidate: false, shouldDirty: false });
@@ -339,12 +359,14 @@ const OrganisationFormPage = () => {
   const selectedCentreType  = watch("centreType");
   const designationOptions  = DESIGNATION_MAP[selectedCentreType] ?? [];
 
-  // NEW: live list of contact names typed in Section 2, for the
-  // "Interacted With" dropdown. Empty names are filtered out.
+  // Live list of contact names typed in Section 2
   const contactsWatch = watch("contacts") || [];
   const contactNameOptions = contactsWatch
     .map((c, idx) => ({ idx, name: (c?.name || "").trim() }))
     .filter((c) => c.name.length > 0);
+
+  // Watch current interactionStatus for color hint
+  const currentStatus = watch("interaction.interactionStatus") || "Initiated";
 
   const handleCentreTypeChange = useCallback(
     (value) => {
@@ -822,6 +844,30 @@ const OrganisationFormPage = () => {
                   placeholder="Enter AIN or NIN number"
                   className={lightInput(!!errors.interaction?.ninAin)}
                 />
+              </FormField>
+
+              {/* ── NEW: Interaction Status dropdown ── */}
+              <FormField
+                label="Interaction Status"
+                error={errors.interaction?.interactionStatus?.message}
+              >
+                <div className="relative">
+                  <select
+                    {...register("interaction.interactionStatus")}
+                    className={lightInput(!!errors.interaction?.interactionStatus)}
+                    aria-required="true"
+                  >
+                    {INTERACTION_STATUSES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  {/* Colour dot hint — updates reactively */}
+                  <span
+                    className={`absolute right-9 top-1/2 -translate-y-1/2 text-[10px] font-bold pointer-events-none ${STATUS_COLORS[currentStatus] ?? "text-slate-400"}`}
+                  >
+                    ●
+                  </span>
+                </div>
               </FormField>
 
               <FormField

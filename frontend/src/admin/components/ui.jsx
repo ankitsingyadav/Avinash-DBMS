@@ -86,3 +86,24 @@ export const inputCls = (hasError = false) =>
       ? "focus:ring-red-200 focus:border-red-400"
       : "focus:ring-blue-100 focus:border-blue-400"
   } transition-all shadow-sm`;
+
+  const INTERACTION_STATUS_COLORS = {
+  "Initiated":   { bg: "#f3e8ff", text: "#6b21a8", dot: "#9333ea", border: "#d8b4fe" },
+  "Progressive": { bg: "#dbeafe", text: "#1e3a8a", dot: "#2563eb", border: "#93c5fd" },
+  "Active":      { bg: "#dcfce7", text: "#14532d", dot: "#16a34a", border: "#86efac" },
+  "Inactive":    { bg: "#f1f5f9", text: "#475569", dot: "#94a3b8", border: "#cbd5e1" },
+  "Pending":     { bg: "#fef9c3", text: "#713f12", dot: "#ca8a04", border: "#fde047" },
+};
+
+export function InteractionStatusBadge({ value }) {
+  const c = INTERACTION_STATUS_COLORS[value] || INTERACTION_STATUS_COLORS["Initiated"];
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.dot }} />
+      {value || "Initiated"}
+    </span>
+  );
+}

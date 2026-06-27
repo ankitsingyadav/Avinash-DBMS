@@ -5,7 +5,8 @@ import toast from "react-hot-toast";
 import { inputCls } from "./ui.jsx";
 import useAuthStore from "../../context/authStore";
 
-const INTERACTION_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
+const INTERACTION_MODES    = ["Email", "Phone", "WhatsApp", "Visit"];
+const INTERACTION_STATUSES = ["Pending", "Progressive", "Active", "Inactive", "Initiated"];
 
 const MODE_ICONS = {
   Email:    "✉️",
@@ -14,11 +15,20 @@ const MODE_ICONS = {
   Visit:    "🏢",
 };
 
+const STATUS_COLORS = {
+  Pending:     "text-amber-600",
+  Progressive: "text-blue-600",
+  Active:      "text-emerald-600",
+  Inactive:    "text-slate-500",
+  Initiated:   "text-violet-600",
+};
+
 const EMPTY_FORM = {
   interactionBy:       "",
   interactedWith:      "",
   interactionDate:     new Date().toISOString().split("T")[0],
   interactionMode:     "",
+  interactionStatus:   "Initiated",
   notes:               "",
   ninAin:              "",
   nextInteractionDate: "",
@@ -31,25 +41,20 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
   const [errors,  setErrors]  = useState({});
   const [loading, setLoading] = useState(false);
 
-  // NEW: toggles "Interacted With" between dropdown-of-contacts and free text
   const [interactedWithCustom, setInteractedWithCustom] = useState(false);
 
-  // NEW: contact names pulled from this organisation's saved contacts
   const contactNameOptions = (record?.contacts || [])
     .map((c, idx) => ({ idx, name: (c?.name || "").trim() }))
     .filter((c) => c.name.length > 0);
 
   useEffect(() => {
     if (isOpen) {
-      // Pre-fill Interaction By + AIN/NIN from logged-in user, rest stays empty.
-      // Both remain fully editable — this only sets the initial value.
       setForm({
         ...EMPTY_FORM,
-        interactionBy: user?.fullName || "",
+        interactionBy: user?.fullName    || "",
         ninAin:        user?.ninAinNumber || "",
       });
       setErrors({});
-      // Default to dropdown mode if this org has saved contacts, else custom text
       setInteractedWithCustom(contactNameOptions.length === 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,10 +71,10 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
 
   const validate = () => {
     const errs = {};
-    if (!form.interactionBy.trim())    errs.interactionBy    = "Required";
-    if (!form.interactedWith.trim())   errs.interactedWith   = "Required";
-    if (!form.interactionDate)         errs.interactionDate  = "Required";
-    if (!form.interactionMode)         errs.interactionMode  = "Required";
+    if (!form.interactionBy.trim())   errs.interactionBy   = "Required";
+    if (!form.interactedWith.trim())  errs.interactedWith  = "Required";
+    if (!form.interactionDate)        errs.interactionDate = "Required";
+    if (!form.interactionMode)        errs.interactionMode = "Required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -82,10 +87,11 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
     setLoading(true);
     try {
       const payload = {
-        interactionBy:   form.interactionBy.trim(),
-        interactedWith:  form.interactedWith.trim(),
-        interactionDate: form.interactionDate,
-        interactionMode: form.interactionMode,
+        interactionBy:     form.interactionBy.trim(),
+        interactedWith:    form.interactedWith.trim(),
+        interactionDate:   form.interactionDate,
+        interactionMode:   form.interactionMode,
+        interactionStatus: form.interactionStatus || "Initiated",
       };
       if (form.notes.trim())        payload.notes               = form.notes.trim();
       if (form.ninAin.trim())       payload.ninAin              = form.ninAin.trim();
@@ -94,7 +100,6 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
 
       await axios.post(`${category.endpoint}/${record._id}/interactions`, payload);
       toast.success("Interaction recorded successfully!");
-      // Notify notification bell + page to refresh immediately
       window.dispatchEvent(new CustomEvent("interaction-saved"));
       onSaved?.();
       onClose();
@@ -142,7 +147,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5 bg-slate-50">
 
-          {/* Current Interaction */}
+          {/* ── Current Interaction ─────────────────────────────────────── */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span
@@ -156,6 +161,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
+              {/* Interaction By */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Interaction By <span className="text-red-500">*</span>
@@ -170,13 +176,11 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                 {errors.interactionBy && <p className="text-red-500 text-xs">{errors.interactionBy}</p>}
               </div>
 
-              {/* Interacted With — dropdown sourced from record.contacts,
-                  with a Custom option that switches to free text */}
+              {/* Interacted With */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Interacted With <span className="text-red-500">*</span>
                 </label>
-
                 {interactedWithCustom ? (
                   <div className="flex gap-2">
                     <input
@@ -190,10 +194,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                     {contactNameOptions.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setInteractedWithCustom(false);
-                          set("interactedWith", "");
-                        }}
+                        onClick={() => { setInteractedWithCustom(false); set("interactedWith", ""); }}
                         className="shrink-0 px-3 rounded-lg border border-slate-300 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"
                         title="Choose from contact list instead"
                       >
@@ -215,14 +216,10 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                     className={inputCls(!!errors.interactedWith)}
                   >
                     <option value="">
-                      {contactNameOptions.length > 0
-                        ? "Select Contact Person"
-                        : "No saved contacts"}
+                      {contactNameOptions.length > 0 ? "Select Contact Person" : "No saved contacts"}
                     </option>
                     {contactNameOptions.map(({ idx, name }) => (
-                      <option key={idx} value={name}>
-                        {name}
-                      </option>
+                      <option key={idx} value={name}>{name}</option>
                     ))}
                     <option value="__custom__">+ Custom (type manually)</option>
                   </select>
@@ -230,6 +227,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                 {errors.interactedWith && <p className="text-red-500 text-xs">{errors.interactedWith}</p>}
               </div>
 
+              {/* Interaction Date */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Interaction Date <span className="text-red-500">*</span>
@@ -239,13 +237,16 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                   value={form.interactionDate}
                   onChange={(e) => set("interactionDate", e.target.value)}
                   max={new Date().toISOString().split("T")[0]}
-                  className={inputCls(!!errors.interactionDate)}
+                  className={inputCls(!!errors.interactionDate) + " [color-scheme:light]"}
                 />
                 {errors.interactionDate && <p className="text-red-500 text-xs">{errors.interactionDate}</p>}
               </div>
 
+              {/* AIN / NIN */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">AIN / NIN Number</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  AIN / NIN Number
+                </label>
                 <input
                   type="text"
                   value={form.ninAin}
@@ -255,6 +256,30 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                 />
               </div>
 
+              {/* Interaction Status */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Interaction Status
+                </label>
+                <div className="relative">
+                  <select
+                    value={form.interactionStatus}
+                    onChange={(e) => set("interactionStatus", e.target.value)}
+                    className={inputCls(false)}
+                  >
+                    {INTERACTION_STATUSES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <span
+                    className={`absolute right-9 top-1/2 -translate-y-1/2 text-[10px] font-bold pointer-events-none ${STATUS_COLORS[form.interactionStatus] ?? "text-slate-400"}`}
+                  >
+                    ●
+                  </span>
+                </div>
+              </div>
+
+              {/* Notes */}
               <div className="sm:col-span-2 space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</label>
                 <textarea
@@ -265,10 +290,11 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                   className={inputCls(false) + " resize-none"}
                 />
               </div>
+
             </div>
           </div>
 
-          {/* Next Interaction */}
+          {/* ── Next Interaction ────────────────────────────────────────── */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span
@@ -282,6 +308,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
+              {/* Planned Date */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Planned Date</label>
                 <input
@@ -289,10 +316,11 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                   value={form.nextInteractionDate}
                   onChange={(e) => set("nextInteractionDate", e.target.value)}
                   min={new Date().toISOString().split("T")[0]}
-                  className={inputCls(false)}
+                  className={inputCls(false) + " [color-scheme:light]"}
                 />
               </div>
 
+              {/* Interaction Mode */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Interaction Mode <span className="text-red-500">*</span>
@@ -323,6 +351,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
                 )}
               </div>
 
+              {/* Next Notes */}
               <div className="sm:col-span-2 space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</label>
                 <textarea
@@ -351,10 +380,7 @@ export default function AddInteractionModal({ isOpen, onClose, record, category,
             onClick={handleSubmit}
             disabled={loading}
             className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 shadow-sm"
-            style={{
-              background: accent,
-              boxShadow: `0 4px 12px ${accent}35`,
-            }}
+            style={{ background: accent, boxShadow: `0 4px 12px ${accent}35` }}
           >
             {loading && (
               <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24">
