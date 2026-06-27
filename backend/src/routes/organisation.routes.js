@@ -14,6 +14,8 @@ import {
   createOrganisation,
   bulkCreateOrganisations,
   bulkCheckDuplicates,
+  lookupByPincode,
+  mergeOrganisations,
   getAllOrganisations,
   getOrganisationById,
   updateOrganisation,
@@ -125,6 +127,18 @@ router.get(
 );
 
 // ═════════════════════════════════════════════════════════════════════════════
+// PINCODE LOOKUP
+// Fully static path — must come before /:id routes
+// ═════════════════════════════════════════════════════════════════════════════
+
+router.get(
+  "/lookup/pincode",
+  checkModuleAccess("organisation"),
+  checkActionAccess("view"),
+  lookupByPincode,
+);
+
+// ═════════════════════════════════════════════════════════════════════════════
 // ORGANISATION BULK ROUTES
 // /bulk/check-duplicates MUST come before /bulk so Express doesn't swallow
 // "check-duplicates" as the body of the /bulk route, and both must come before
@@ -171,6 +185,14 @@ router.post(
   applyDataScope,
   checkActionAccess("edit"),
   cancelNextInteraction,
+);
+
+router.post(
+  "/:id/merge",
+  checkModuleAccess("organisation"),
+  applyDataScope,
+  checkActionAccess("edit"),
+  mergeOrganisations,
 );
 
 // ═════════════════════════════════════════════════════════════════════════════

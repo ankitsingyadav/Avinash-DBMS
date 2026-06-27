@@ -9,7 +9,7 @@
 //      section — options: Pending, Progressive, Active, Inactive, Initiated
 //      Default: "Initiated"
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -274,6 +274,51 @@ function DuplicateBanner({ message, onDismiss }) {
   );
 }
 
+// ─── Pincode pre-check panel (shown when existing orgs share the entered pincode)
+function PincodeMatchesPanel({ orgs, onDismiss }) {
+  if (!orgs || orgs.length === 0) return null;
+  return (
+    <div
+      role="status"
+      className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 space-y-2"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="#d97706" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </span>
+          <p className="text-xs font-semibold text-amber-800">
+            {orgs.length} organisation{orgs.length > 1 ? "s" : ""} already registered at this pincode — verify before submitting.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss pincode warning"
+          className="shrink-0 text-amber-400 hover:text-amber-700 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <ul className="space-y-1.5 pl-7">
+        {orgs.map((org) => (
+          <li key={org._id} className="text-xs text-amber-900 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+            <span className="font-semibold">{org.centreName}</span>
+            <span className="text-amber-600 font-normal">
+              ({org.centreType}) — {[org.city, org.district, org.state].filter(Boolean).join(", ")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // ─── CSS injection: force LocationSelector inputs to white ───────────────────
 const LOCATION_STYLE_ID = "org-form-location-overrides";
 
@@ -314,6 +359,11 @@ const OrganisationFormPage = () => {
   const [formData,          setFormData]          = useState(null);
   const [duplicateMsg,      setDuplicateMsg]      = useState("");
 
+  // Pincode pre-check state
+  const [pincodeOrgs,       setPincodeOrgs]       = useState([]);
+  const [pincodeDismissed,  setPincodeDismissed]  = useState(false);
+  const pincodeDebounceRef  = useRef(null);
+
   // toggles "Interacted With" between dropdown-of-contacts and free text
   const [interactedWithCustom, setInteractedWithCustom] = useState(false);
 
@@ -353,6 +403,29 @@ const OrganisationFormPage = () => {
     }
   }, [user, setValue]);
 
+  // ── Pincode live-lookup (debounced 500 ms) ──────────────────────────────────
+  const watchedPincode = watch("pincode");
+  useEffect(() => {
+    if (pincodeDebounceRef.current) clearTimeout(pincodeDebounceRef.current);
+    const pin = String(watchedPincode || "").trim();
+    if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+      setPincodeOrgs([]);
+      setPincodeDismissed(false);
+      return;
+    }
+    pincodeDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await axios.get(`/organisations/lookup/pincode?pincode=${pin}`);
+        setPincodeOrgs(res.data?.data?.organisations ?? []);
+        setPincodeDismissed(false);
+      } catch (err) {
+        console.warn("[PincodeLookup] Failed:", err?.response?.status, err?.response?.data ?? err?.message);
+        setPincodeOrgs([]);
+      }
+    }, 500);
+    return () => clearTimeout(pincodeDebounceRef.current);
+  }, [watchedPincode]);
+
   const { fields, append, remove } = useFieldArray({ control, name: "contacts" });
   const contactCount = fields.length;
 
@@ -380,6 +453,8 @@ const OrganisationFormPage = () => {
 
   const onSubmit = useCallback((data) => {
     setDuplicateMsg("");
+    setPincodeOrgs([]);
+    setPincodeDismissed(false);
     setFormData(data);
     setShowConfirm(true);
   }, []);
@@ -565,6 +640,12 @@ const OrganisationFormPage = () => {
                 getValues={getValues}
                 trigger={trigger}
               />
+              {!pincodeDismissed && (
+                <PincodeMatchesPanel
+                  orgs={pincodeOrgs}
+                  onDismiss={() => setPincodeDismissed(true)}
+                />
+              )}
             </div>
 
             <div className="mt-6 pt-6 border-t border-slate-100">

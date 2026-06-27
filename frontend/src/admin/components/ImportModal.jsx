@@ -219,17 +219,9 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     if (gathered.duplicates.length > 0) {
       setAllDuplicates(gathered.duplicates);
       setCleanPlan(gathered.cleanPlans);
-      setStep("preview");
+      // Show dup review FIRST. Upload of clean rows happens in handleDupDone.
       setDupModalOpen(true);
-
-      // Only upload the clean (non-duplicate) rows
-      if (gathered.cleanPlans.length > 0) {
-        _runUpload(gathered.cleanPlans);
-      } else {
-        // All rows are duplicates — no upload needed
-        setStep("done");
-        setResults([{ catLabel: "Centres", accent: "#8b5cf6", success: 0, failed: 0, skipped: gathered.duplicates.length }]);
-      }
+      setStep("preview");
       return;
     }
 
@@ -312,9 +304,30 @@ export default function ImportModal({ isOpen, onClose, onUploaded }) {
     if (tf > 0) toast.error(`${tf} records failed — see details below.`);
   };
 
-  const handleDupDone = (forceInsertedCount) => {
+  const handleDupDone = async (processedCount) => {
     setDupModalOpen(false);
-    if (forceInsertedCount > 0) onUploaded();
+    if (processedCount > 0) onUploaded();
+
+    if (cleanPlan.length > 0) {
+      // Upload the clean (non-duplicate) rows now that user has reviewed dups
+      await _runUpload(cleanPlan);
+    } else {
+      // All records were duplicates — compose the done screen from dup counts
+      const catGroups = {};
+      for (const d of allDuplicates) {
+        const key = d.catLabel || "Centres";
+        if (!catGroups[key]) catGroups[key] = { catLabel: key, accent: "#8b5cf6", success: 0, failed: 0, skipped: 0 };
+        catGroups[key].skipped++;
+      }
+      // processedCount items were inserted/merged rather than skipped
+      const firstCat = Object.values(catGroups)[0];
+      if (firstCat) {
+        firstCat.skipped   = Math.max(0, firstCat.skipped - processedCount);
+        firstCat.success   = processedCount;
+      }
+      setResults(Object.values(catGroups));
+      setStep("done");
+    }
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────

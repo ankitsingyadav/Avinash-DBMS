@@ -555,6 +555,94 @@ export const getInteractions = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/lookup/pincode?pincode=123456
+// Returns existing orgs at a given pincode for pre-entry duplicate prevention.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const lookupByPincode = asyncHandler(async (req, res) => {
+  const pin = normalisePincode(req.query.pincode || "");
+  if (!pin || pin.length !== 6)
+    return sendError(res, 422, "A valid 6-digit pincode is required.");
+
+  const orgs = await Organisation.find({ pincode: pin })
+    .select("_id centreName centreType city district state pincode")
+    .limit(20)
+    .lean();
+
+  return sendSuccess(res, 200, "Pincode lookup completed.", {
+    count:         orgs.length,
+    organisations: orgs,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/organisations/:id/merge
+// Merges incoming record data into an existing organisation.
+// Strategy: append new contacts (dedup by email), append new interaction,
+//           fill blank scalar fields from incoming data.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const mergeOrganisations = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const incoming = req.body;
+
+  const org = await Organisation.findById(id);
+  if (!org) return sendError(res, 404, "Organisation not found.");
+
+  const pushOps = {};
+
+  // Append contacts not already present (dedup by email, then phone)
+  const existingEmails = new Set(org.contacts.map((c) => (c.email || "").toLowerCase().trim()));
+  const existingPhones = new Set(org.contacts.map((c) => (c.contactNumber || "").trim()));
+  const newContacts = (Array.isArray(incoming.contacts) ? incoming.contacts : []).filter((c) => {
+    const email = (c.email || "").toLowerCase().trim();
+    const phone = (c.contactNumber || "").trim();
+    return email && !existingEmails.has(email) && !existingPhones.has(phone);
+  });
+
+  if (newContacts.length > 0) pushOps.contacts = { $each: newContacts };
+
+  // Append interaction from incoming data
+  const rawInteraction = incoming.interaction || (Array.isArray(incoming.interactions) ? incoming.interactions[0] : null);
+  if (rawInteraction) {
+    pushOps.interactions = buildInteractionFromBody(rawInteraction);
+  }
+
+  const updateOps = {};
+  if (Object.keys(pushOps).length > 0) updateOps.$push = pushOps;
+
+  // Fill empty scalar fields on the existing record
+  const setOps = {};
+  if ((!org.website || org.website === "https://example.com") && incoming.website)
+    setOps.website = normaliseWebsite(incoming.website);
+  if (!org.address && incoming.address)
+    setOps.address = String(incoming.address).trim();
+  if (!org.ninAin && incoming.ninAin)
+    setOps.ninAin = String(incoming.ninAin).trim();
+
+  if (Object.keys(setOps).length > 0) updateOps.$set = setOps;
+
+  if (Object.keys(updateOps).length === 0) {
+    return sendSuccess(res, 200, "No new data to merge — existing record is already up to date.", {
+      organisation: org,
+      newContacts: 0,
+      newInteractions: 0,
+    });
+  }
+
+  const updated = await Organisation.findByIdAndUpdate(id, updateOps, {
+    new:            true,
+    runValidators:  false,
+  });
+
+  return sendSuccess(res, 200, "Records merged successfully.", {
+    organisation:    updated,
+    newContacts:     newContacts.length,
+    newInteractions: rawInteraction ? 1 : 0,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/v1/organisations/meta/districts
 // ─────────────────────────────────────────────────────────────────────────────
 
