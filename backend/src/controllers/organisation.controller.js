@@ -260,11 +260,14 @@ export const deleteVolunteer = asyncHandler(async (req, res) => {
 export const getUpcomingInteractions = asyncHandler(async (req, res) => {
   const now = new Date();
 
-  // Aaj ke din ka start (00:00:00.000) — date-only stored values ke liye zaroori
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
+  // Use UTC midnight so date-only values (stored as 00:00 UTC) are always included.
+  // Local midnight (setHours 0,0,0,0) in IST = 18:30 UTC the day before, causing
+  // yesterday's interactions to appear in today's window.
+  const startOfToday = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()
+  ));
 
-  // Aaj se 48 ghante aage tak
+  // 48-hour forward window from NOW (not from midnight) so urgency labels are accurate
   const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
   const query = {
@@ -293,30 +296,35 @@ export const getUpcomingInteractions = asyncHandler(async (req, res) => {
     .select("centreName centreType interactions")
     .lean({ virtuals: false });
 
-  // Flatten: har qualifying interaction entry ke liye ek notification
+  // Only use the LAST interaction per org for nextInteractionDate.
+  // Iterating all entries caused stale planned-dates from old interactions to
+  // appear in notifications even after new interactions were added on top.
   const interactions = [];
 
   for (const org of orgs) {
     const entries = org.interactions || [];
-    entries.forEach((entry, idx) => {
-      if (!entry.nextInteractionDate) return;
-      const d = new Date(entry.nextInteractionDate);
+    if (entries.length === 0) continue;
 
-      // FIX: startOfToday se compare karo, sirf in48h tak
-      if (d >= startOfToday && d <= in48h) {
-        interactions.push({
-          _id:                 org._id,
-          centreName:          org.centreName,
-          centreType:          org.centreType,
-          interactionIndex:    idx,
-          interactionMode:     entry.interactionMode,
-          interactedWith:      entry.interactedWith,
-          interactionBy:       entry.interactionBy,
-          notes:               entry.notes,
-          nextInteractionDate: entry.nextInteractionDate,
-          interactionDate:     entry.interactionDate,
-        });
-      }
+    const lastIdx = entries.length - 1;
+    const last    = entries[lastIdx];
+
+    if (!last.nextInteractionDate) continue;
+    const d = new Date(last.nextInteractionDate);
+    if (d < startOfToday || d > in48h) continue;
+
+    interactions.push({
+      _id:                 org._id,
+      centreName:          org.centreName,
+      centreType:          org.centreType,
+      interactionIndex:    lastIdx,
+      interactionMode:     last.interactionMode,
+      interactionStatus:   last.interactionStatus,
+      interactedWith:      last.interactedWith,
+      interactionBy:       last.interactionBy,
+      notes:               last.notes,
+      nextNotes:           last.nextNotes,
+      nextInteractionDate: last.nextInteractionDate,
+      interactionDate:     last.interactionDate,
     });
   }
 
