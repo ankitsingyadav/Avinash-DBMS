@@ -76,8 +76,17 @@ function InteractionBlock({ interaction, accent }) {
 
   const {
     interactionBy, interactedWith, interactionDate,
-    interactionMode, notes, ninAin, nextInteractionDate,
+    interactionMode, interactionStatus, notes, ninAin,
+    nextInteractionDate, nextNotes,
   } = interaction;
+
+  const STATUS_COLORS_VM = {
+    Initiated:   { color: "#a78bfa", bg: "rgba(167,139,250,0.15)" },
+    Pending:     { color: "#fbbf24", bg: "rgba(251,191,36,0.15)"  },
+    Progressive: { color: "#60a5fa", bg: "rgba(96,165,250,0.15)"  },
+    Active:      { color: "#34d399", bg: "rgba(52,211,153,0.15)"  },
+    Inactive:    { color: "#94a3b8", bg: "rgba(148,163,184,0.15)" },
+  };
 
   return (
     <div className="space-y-3 w-full">
@@ -113,6 +122,21 @@ function InteractionBlock({ interaction, accent }) {
               <p className="text-white font-medium font-mono">{ninAin}</p>
             </div>
           )}
+          {interactionStatus && (() => {
+            const sc = STATUS_COLORS_VM[interactionStatus] || { color: "#94a3b8", bg: "rgba(148,163,184,0.15)" };
+            return (
+              <div>
+                <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-0.5">Status</p>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                  background: sc.bg, color: sc.color, letterSpacing: "0.04em",
+                  textTransform: "uppercase", display: "inline-block",
+                }}>
+                  {interactionStatus}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         {notes && (
@@ -151,6 +175,13 @@ function InteractionBlock({ interaction, accent }) {
             </div>
           )}
         </div>
+
+        {nextNotes && (
+          <div className="pt-2 border-t border-slate-700/40">
+            <p className="text-slate-600 text-[10px] uppercase tracking-wide mb-1">Next Notes</p>
+            <p className="text-slate-300 text-xs leading-relaxed">{nextNotes}</p>
+          </div>
+        )}
       </div>
 
     </div>

@@ -390,6 +390,8 @@ export default function Notificationspage() {
         interactionIndex: removedIndex,
       });
       toast.success("Interaction marked as done.");
+      // Notify NotificationBell to refresh its count
+      window.dispatchEvent(new CustomEvent("interaction-saved"));
     } catch {
       toast.error("Could not mark as done. Please try again.");
       fetchData(true); // restore correct state from server
@@ -786,7 +788,7 @@ export default function Notificationspage() {
                       </div>
 
                       {/* Sub info */}
-                      <p style={{ color: "#7a9ec0", fontSize: 11.5, margin: "0 0 11px" }}>
+                      <p style={{ color: "#7a9ec0", fontSize: 11.5, margin: "0 0 7px" }}>
                         {mode.icon} {item.interactionMode}
                         {item.interactedWith && (
                           <> · with <strong style={{ color: "#4a7090" }}>{item.interactedWith}</strong></>
@@ -795,6 +797,38 @@ export default function Notificationspage() {
                           <> · by <strong style={{ color: "#4a7090" }}>{item.interactionBy}</strong></>
                         )}
                       </p>
+
+                      {/* Status badge + next notes */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
+                        {item.interactionStatus && (() => {
+                          const STATUS_COLORS_MAP = {
+                            Initiated: { color: "#7c3aed", bg: "rgba(124,58,237,0.10)" },
+                            Pending:   { color: "#d97706", bg: "rgba(217,119,6,0.10)" },
+                            Progressive: { color: "#2563eb", bg: "rgba(37,99,235,0.10)" },
+                            Active:    { color: "#059669", bg: "rgba(5,150,105,0.10)" },
+                            Inactive:  { color: "#64748b", bg: "rgba(100,116,139,0.10)" },
+                          };
+                          const sc = STATUS_COLORS_MAP[item.interactionStatus] || { color: "#64748b", bg: "rgba(100,116,139,0.10)" };
+                          return (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                              background: sc.bg, color: sc.color,
+                              letterSpacing: "0.03em", textTransform: "uppercase",
+                            }}>
+                              {item.interactionStatus}
+                            </span>
+                          );
+                        })()}
+                        {item.nextNotes && (
+                          <span style={{
+                            fontSize: 11, color: "#7a9ec0", fontStyle: "italic",
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            maxWidth: 180,
+                          }}>
+                            "{item.nextNotes}"
+                          </span>
+                        )}
+                      </div>
 
                       {/* Time + Date row */}
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

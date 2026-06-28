@@ -512,29 +512,25 @@ export const addInteraction = asyncHandler(async (req, res) => {
   if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id))
     return sendError(res, 403, "You can only edit records you created.");
 
-  const prevIdx = org.interactions.length - 1;
-  if (prevIdx >= 0 && org.interactions[prevIdx].nextInteractionDate) {
-    await Organisation.updateOne(
-      { _id: id },
-      { $unset: { [`interactions.${prevIdx}.nextInteractionDate`]: "" } }
-    );
-  }
+  // Clear nextInteractionDate + nextNotes from every existing interaction in-memory.
+  // MongoDB rejects $push and $unset on the same path ("interactions" vs "interactions.N.x")
+  // in a single update, so we mutate the doc in memory and call save() once — atomic
+  // at the document level with no path conflict.
+  org.interactions.forEach((entry) => {
+    if (entry.nextInteractionDate) entry.nextInteractionDate = undefined;
+    if (entry.nextNotes)           entry.nextNotes           = undefined;
+  });
 
-  const newEntry = buildInteractionFromBody(req.body);
+  org.interactions.push(buildInteractionFromBody(req.body));
+  org.markModified("interactions");
 
   try {
-    const organisation = await Organisation.findByIdAndUpdate(
-      id,
-      { $push: { interactions: newEntry } },
-      { new: true, runValidators: false }
-    );
+    await org.save({ validateBeforeSave: false });
 
-    if (!organisation) return sendError(res, 404, "Organisation not found.");
-
-    const added = organisation.interactions[organisation.interactions.length - 1];
+    const added = org.interactions[org.interactions.length - 1];
     return sendSuccess(res, 201, "Interaction added successfully.", {
       interaction:       added,
-      totalInteractions: organisation.interactions.length,
+      totalInteractions: org.interactions.length,
     });
   } catch (err) {
     if (err.name === "ValidationError")

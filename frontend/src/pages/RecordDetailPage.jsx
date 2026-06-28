@@ -7,6 +7,20 @@ import Navbar from "../components/Navbar";
 import { CATEGORIES } from "../admin/constants.js";
 import { CATEGORY_ICONS } from "../admin/icons.jsx";
 import { fmtDate } from "../admin/helpers.js";
+
+const fmtDateTime = (d) =>
+  d ? new Date(d).toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  }) : "—";
+
+const STATUS_CFG = {
+  Initiated:   { color: "#7c3aed", bg: "#7c3aed15" },
+  Pending:     { color: "#d97706", bg: "#d9770615" },
+  Progressive: { color: "#2563eb", bg: "#2563eb15" },
+  Active:      { color: "#059669", bg: "#05966915" },
+  Inactive:    { color: "#64748b", bg: "#64748b15" },
+};
 import { StatusBadge, DataStatusBadge, TypeBadge } from "../admin/components/ui.jsx";
 import EditModal from "../admin/components/EditModal.jsx";
 import AddInteractionModal from "../admin/components/Addinteractionmodal.jsx";
@@ -160,10 +174,21 @@ function InteractionCard({ entry, index, total, accent }) {
               </span>
             )}
             <span className="text-slate-800 text-xs font-semibold">
-              {fmtDate(entry.interactionDate)}
+              {fmtDateTime(entry.interactionDate)}
             </span>
             <span className="text-slate-500 text-xs">·</span>
             <span className="text-xs font-medium text-slate-600">{entry.interactionBy}</span>
+            {entry.interactionStatus && (() => {
+              const s = STATUS_CFG[entry.interactionStatus] || { color: "#64748b", bg: "#64748b15" };
+              return (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                  style={{ background: s.bg, color: s.color }}
+                >
+                  {entry.interactionStatus}
+                </span>
+              );
+            })()}
           </div>
           <div className="flex items-center gap-2">
             <span

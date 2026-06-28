@@ -3,11 +3,27 @@ import { useState, useEffect } from "react";
 import axios from "../../utils/axios.js";
 import { fmtDate } from "../helpers.js";
 
+const fmtDateTime = (d) =>
+  d
+    ? new Date(d).toLocaleString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit", hour12: true,
+      })
+    : "—";
+
 const MODE_CONFIG = {
   Email:    { icon: "✉️",  color: "#6366f1" },
   Phone:    { icon: "📞",  color: "#10b981" },
   WhatsApp: { icon: "💬",  color: "#22c55e" },
   Visit:    { icon: "🏢",  color: "#f59e0b" },
+};
+
+const STATUS_CONFIG = {
+  Initiated:   { color: "#7c3aed", bg: "#7c3aed15" },
+  Pending:     { color: "#d97706", bg: "#d9770615" },
+  Progressive: { color: "#2563eb", bg: "#2563eb15" },
+  Active:      { color: "#059669", bg: "#05966915" },
+  Inactive:    { color: "#64748b", bg: "#64748b15" },
 };
 
 function InteractionCard({ entry, index, total, accent }) {
@@ -44,24 +60,35 @@ function InteractionCard({ entry, index, total, accent }) {
       >
         {/* Card header */}
         <div
-          className="flex items-center justify-between px-4 py-3 border-b"
+          className="flex items-center justify-between px-4 py-3 border-b gap-2"
           style={{ borderColor: isLatest ? `${accent}15` : "#f1f5f9" }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
             {isLatest && (
               <span
-                className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-widest"
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-widest shrink-0"
                 style={{ background: `${accent}20`, color: accent }}
               >
                 Latest
               </span>
             )}
             <span className="text-slate-800 text-xs font-semibold">
-              {fmtDate(entry.interactionDate)}
+              {fmtDateTime(entry.interactionDate)}
             </span>
+            {entry.interactionStatus && (() => {
+              const s = STATUS_CONFIG[entry.interactionStatus] || { color: "#64748b", bg: "#64748b15" };
+              return (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0"
+                  style={{ background: s.bg, color: s.color }}
+                >
+                  {entry.interactionStatus}
+                </span>
+              );
+            })()}
           </div>
           <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0"
             style={{ background: `${mode.color}15`, color: mode.color }}
           >
             {entry.interactionMode}
@@ -150,27 +177,26 @@ function InteractionCard({ entry, index, total, accent }) {
 }
 
 export default function Interactionhistorymodal({ isOpen, onClose, record, category, onAddNew }) {
-  const [history,  setHistory]  = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
+  const [state, setState] = useState({ history: [], loading: false, error: null });
 
   useEffect(() => {
     if (!isOpen || !record?._id) return;
-    setHistory([]);
-    setError(null);
-    setLoading(true);
+    // Reset state when a new record opens — one batched call is intentional here
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState({ history: [], loading: true, error: null });
 
     axios
       .get(`${category.endpoint}/${record._id}/interactions`)
       .then((res) => {
         const data = res.data?.data ?? res.data ?? {};
-        setHistory(data.interactions || []);
+        setState({ history: data.interactions || [], loading: false, error: null });
       })
       .catch((err) => {
-        setError(err.response?.data?.message || "Failed to load interaction history.");
-      })
-      .finally(() => setLoading(false));
+        setState({ history: [], loading: false, error: err.response?.data?.message || "Failed to load interaction history." });
+      });
   }, [isOpen, record?._id]); // eslint-disable-line
+
+  const { history, loading, error } = state;
 
   if (!isOpen || !record) return null;
 
