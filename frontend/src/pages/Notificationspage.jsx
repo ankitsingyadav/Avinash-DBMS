@@ -122,6 +122,16 @@ const STYLES = `
     transform: scale(1.04);
   }
 
+  .np-reschedule-btn {
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .np-reschedule-btn:hover {
+    background: rgba(109,40,217,0.12) !important;
+    border-color: rgba(109,40,217,0.45) !important;
+    transform: scale(1.04);
+  }
+
   .np-filter-chip {
     transition: all 0.14s;
     cursor: pointer;
@@ -248,6 +258,180 @@ function CancelModal({ item, onConfirm, onCancel, loading }) {
   );
 }
 
+// ── Reschedule Modal (edit next interaction: date / mode / notes) ────────────
+function RescheduleModal({ item, onConfirm, onCancel, loading }) {
+  const [date, setDate] = useState(
+    item?.nextInteractionDate
+      ? new Date(item.nextInteractionDate).toISOString().split("T")[0]
+      : ""
+  );
+  const [mode, setMode]   = useState(item?.interactionMode || "");
+  const [notes, setNotes] = useState(item?.nextNotes || "");
+  const [error, setError] = useState("");
+
+  if (!item) return null;
+
+  const handleConfirm = () => {
+    if (!date) { setError("Please pick a date."); return; }
+    if (!mode) { setError("Please select a mode."); return; }
+    setError("");
+    onConfirm({ nextInteractionDate: date, interactionMode: mode, nextNotes: notes.trim() });
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "rgba(15,42,74,0.55)", backdropFilter: "blur(10px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div style={{
+        background: "#ffffff",
+        border: "1px solid #bfdbfe",
+        borderRadius: 22, padding: 32, maxWidth: 420, width: "100%",
+        boxShadow: "0 32px 80px rgba(30,60,120,0.18)",
+        animation: "np-fadeUp 0.22s ease",
+      }}>
+        <div style={{
+          width: 54, height: 54, borderRadius: 16,
+          background: "#eff6ff", border: "1px solid #bfdbfe",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 24, marginBottom: 20,
+        }}>🔄</div>
+
+        <p style={{ color: "#0f2a4a", fontSize: 18, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.03em" }}>
+          Reschedule Interaction
+        </p>
+        <p style={{ color: "#7a9ec0", fontSize: 13, margin: "0 0 20px", lineHeight: 1.65 }}>
+          Update the planned date, mode, and notes. This edits the existing entry — it won't create a new interaction or change the interaction count.
+        </p>
+
+        <div style={{
+          padding: "11px 14px", borderRadius: 12, marginBottom: 20,
+          background: "#f5f9ff", border: "1px solid #cce0f5",
+        }}>
+          <p style={{ color: "#0f2a4a", fontSize: 13, fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.centreName}
+          </p>
+        </div>
+
+        {/* Date */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#5a85aa", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 6 }}>
+            Next Interaction Date
+          </label>
+          <input
+            type="date"
+            value={date}
+            min={new Date().toISOString().split("T")[0]}
+            onChange={(e) => setDate(e.target.value)}
+            style={{
+              width: "100%", background: "#f5f9ff", border: "1px solid #cce0f5",
+              borderRadius: 10, padding: "9px 11px", color: "#0f2a4a", fontSize: 13,
+              outline: "none", boxSizing: "border-box", fontFamily: "'Syne', sans-serif",
+              colorScheme: "light",
+            }}
+          />
+        </div>
+
+        {/* Mode */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#5a85aa", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 6 }}>
+            Interaction Mode
+          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7 }}>
+            {["Email", "Phone", "WhatsApp", "Visit"].map((m) => {
+              const meta   = MODE_META[m] || {};
+              const active = mode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                    padding: "8px 4px", borderRadius: 10, cursor: "pointer",
+                    border: `1px solid ${active ? (meta.color || "#4f46e5") + "60" : "#cce0f5"}`,
+                    background: active ? (meta.bg || "#eef2ff") : "#f5f9ff",
+                    color: active ? (meta.color || "#4f46e5") : "#5a85aa",
+                    fontSize: 10.5, fontWeight: 700,
+                    fontFamily: "'Syne', sans-serif", transition: "all 0.14s",
+                  }}
+                >
+                  <span style={{ fontSize: 15 }}>{meta.icon}</span>
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div style={{ marginBottom: error ? 10 : 22 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#5a85aa", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 6 }}>
+            Notes
+          </label>
+          <textarea
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Any notes for the next interaction..."
+            style={{
+              width: "100%", background: "#f5f9ff", border: "1px solid #cce0f5",
+              borderRadius: 10, padding: "9px 11px", color: "#0f2a4a", fontSize: 13,
+              outline: "none", boxSizing: "border-box", fontFamily: "'Syne', sans-serif",
+              resize: "none",
+            }}
+          />
+        </div>
+
+        {error && (
+          <p style={{ color: "#dc2626", fontSize: 12, margin: "0 0 14px", fontWeight: 600 }}>{error}</p>
+        )}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            style={{
+              flex: 1, padding: "12px", borderRadius: 12,
+              background: "#f5f9ff", border: "1px solid #cce0f5",
+              color: "#7a9ec0", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              fontFamily: "'Syne', sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={loading}
+            style={{
+              flex: 1, padding: "12px", borderRadius: 12,
+              background: loading ? "#eff6ff" : "#dbeafe",
+              border: "1px solid #bfdbfe",
+              color: "#1d4ed8", fontSize: 13, fontWeight: 700,
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.6 : 1,
+              fontFamily: "'Syne', sans-serif",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            {loading ? (
+              <>
+                <span style={{
+                  width: 13, height: 13,
+                  border: "2px solid rgba(29,78,216,0.25)", borderTopColor: "#1d4ed8",
+                  borderRadius: "50%", animation: "np-spin 0.7s linear infinite", display: "inline-block",
+                }} />
+                Updating…
+              </>
+            ) : "Update"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Skeleton Card ─────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
@@ -310,6 +494,11 @@ export default function Notificationspage() {
   const [loading,      setLoading]      = useState(true);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling,   setCancelling]   = useState(false);
+
+  // Reschedule (edit next interaction — date/mode/notes) state
+  const [rescheduleTarget, setRescheduleTarget] = useState(null);
+  const [rescheduling,     setRescheduling]     = useState(false);
+
   const lastFetchRef = useRef(0);
   const tickRef      = useRef(null);
 
@@ -398,6 +587,48 @@ export default function Notificationspage() {
     }
   };
 
+  // ── Reschedule — edits the SAME interaction entry (date/mode/notes only).
+  //    No new interaction is pushed, so interactionCount stays exactly as-is. ───
+  const handleRescheduleConfirm = async (formData) => {
+    if (!rescheduleTarget) return;
+    setRescheduling(true);
+
+    const orgId  = String(rescheduleTarget._id);
+    const idx    = rescheduleTarget.interactionIndex;
+
+    try {
+      await axios.patch(`/organisations/${orgId}/interactions/next`, {
+        interactionIndex:    idx,
+        nextInteractionDate: formData.nextInteractionDate,
+        interactionMode:     formData.interactionMode,
+        nextNotes:           formData.nextNotes,
+      });
+
+      // Update the same entry in place — nothing added, nothing removed
+      setInteractions((prev) =>
+        prev.map((i) =>
+          String(i._id) === orgId && i.interactionIndex === idx
+            ? {
+                ...i,
+                nextInteractionDate: formData.nextInteractionDate,
+                interactionMode:     formData.interactionMode,
+                nextNotes:           formData.nextNotes,
+              }
+            : i
+        )
+      );
+
+      toast.success("Interaction rescheduled successfully.");
+      setRescheduleTarget(null);
+      // Notify NotificationBell / other tabs to refresh
+      window.dispatchEvent(new CustomEvent("interaction-saved"));
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Could not reschedule. Please try again.");
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
   // ── Navigate ────────────────────────────────────────────────────────────────
   const handleGoToAdmin = (item, e) => {
     if (e) e.stopPropagation();
@@ -452,6 +683,15 @@ export default function Notificationspage() {
           onConfirm={handleCancelConfirm}
           onCancel={() => setCancelTarget(null)}
           loading={cancelling}
+        />
+      )}
+
+      {rescheduleTarget && (
+        <RescheduleModal
+          item={rescheduleTarget}
+          onConfirm={handleRescheduleConfirm}
+          onCancel={() => setRescheduleTarget(null)}
+          loading={rescheduling}
         />
       )}
 
@@ -888,6 +1128,24 @@ export default function Notificationspage() {
                         <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                         </svg>
+                      </button>
+
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRescheduleTarget(item); }}
+                        title="Reschedule next interaction (date / mode / notes)"
+                        className="np-reschedule-btn"
+                        style={{
+                          display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+                          background: "#f5f3ff", border: "1px solid #ddd6fe",
+                          borderRadius: 9, padding: "6px 11px", color: "#6d28d9",
+                          fontSize: 11, fontWeight: 700,
+                          fontFamily: "'Syne', sans-serif",
+                        }}
+                      >
+                        <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+                        </svg>
+                        Reschedule
                       </button>
 
                       <button

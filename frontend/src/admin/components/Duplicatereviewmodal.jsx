@@ -135,22 +135,22 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={!loading ? onClose : undefined}
       />
 
-      <div className="relative w-full max-w-2xl bg-[#13131f] border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={2}>
+            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#d97706" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
               </svg>
             </div>
             <div>
-              <h3 className="text-white font-bold text-sm">Duplicate Records Found</h3>
+              <h3 className="text-slate-900 font-bold text-sm">Duplicate Records Found</h3>
               <p className="text-slate-500 text-xs mt-0.5">
                 {duplicates.length} record{duplicates.length > 1 ? "s" : ""} already exist in the database
               </p>
@@ -159,7 +159,7 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
           {!loading && (
             <button
               onClick={onClose}
-              className="text-slate-600 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+              className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -169,20 +169,20 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
         </div>
 
         {/* ── Explanation banner ──────────────────────────────────────────── */}
-        <div className="mx-6 mt-4 px-4 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/15 shrink-0">
-          <p className="text-amber-400/80 text-xs leading-relaxed">
+        <div className="mx-6 mt-4 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 shrink-0">
+          <p className="text-amber-800 text-xs leading-relaxed">
             Choose an action for each duplicate:&nbsp;
-            <strong className="text-slate-400">Skip</strong> to ignore,&nbsp;
-            <strong className="text-emerald-400">Merge</strong> to add new contacts&nbsp;&amp; interactions into the existing record, or&nbsp;
-            <strong className="text-indigo-400">Insert</strong> to create a separate copy.
+            <strong className="text-slate-600">Skip</strong> to ignore,&nbsp;
+            <strong className="text-emerald-700">Merge</strong> to add new contacts&nbsp;&amp; interactions into the existing record, or&nbsp;
+            <strong className="text-indigo-700">Insert</strong> to create a separate copy.
           </p>
         </div>
 
         {/* ── Summary bar ────────────────────────────────────────────────── */}
         <div className="flex items-center gap-4 px-6 py-3 shrink-0 text-xs">
-          {insertCount > 0 && <span className="text-indigo-400 font-semibold">{insertCount} insert</span>}
-          {mergeCount  > 0 && <span className="text-emerald-400 font-semibold">{mergeCount} merge</span>}
-          {skipCount   > 0 && <span className="text-slate-600">{skipCount} skip</span>}
+          {insertCount > 0 && <span className="text-indigo-700 font-semibold">{insertCount} insert</span>}
+          {mergeCount  > 0 && <span className="text-emerald-700 font-semibold">{mergeCount} merge</span>}
+          {skipCount   > 0 && <span className="text-slate-500">{skipCount} skip</span>}
         </div>
 
         {/* ── Duplicate list ──────────────────────────────────────────────── */}
@@ -192,47 +192,46 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
             const inc    = d.incoming;
             const ex     = d.existing;
 
-            const borderVal =
-              action === ACTION_INSERT ? "1px solid #6366f130" :
-              action === ACTION_MERGE  ? "1px solid #10b98130" : "1px solid #1e293b";
+            const borderColor =
+              action === ACTION_INSERT ? "border-indigo-200" :
+              action === ACTION_MERGE  ? "border-emerald-200" : "border-slate-200";
             const bgColor =
-              action === ACTION_INSERT ? "#6366f108" :
-              action === ACTION_MERGE  ? "#10b98108" : "#0f172a";
+              action === ACTION_INSERT ? "bg-indigo-50/40" :
+              action === ACTION_MERGE  ? "bg-emerald-50/40" : "bg-slate-50";
 
             return (
               <div
                 key={i}
-                className="rounded-xl transition-all"
-                style={{ border: borderVal, background: bgColor }}
+                className={`rounded-xl border transition-all ${borderColor} ${bgColor}`}
               >
                 {/* Info row */}
                 <div className="flex items-start gap-3 px-4 pt-3 pb-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-white text-sm font-semibold truncate">
+                      <span className="text-slate-900 text-sm font-semibold truncate">
                         {inc.centreName || inc.name || "—"}
                       </span>
                       {inc.centreType && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-400 font-medium shrink-0">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 font-medium shrink-0">
                           {inc.centreType}
                         </span>
                       )}
                       {d.catLabel && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-medium shrink-0">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium shrink-0">
                           {d.catLabel}
                         </span>
                       )}
                     </div>
 
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div className="bg-slate-800/40 rounded-lg px-3 py-2 space-y-1">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Importing</p>
-                        <p className="text-xs text-slate-300 truncate">{inc.city || "—"}{inc.state ? `, ${inc.state}` : ""}</p>
+                      <div className="bg-white rounded-lg px-3 py-2 space-y-1 border border-slate-200 shadow-sm">
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Importing</p>
+                        <p className="text-xs text-slate-700 truncate">{inc.city || "—"}{inc.state ? `, ${inc.state}` : ""}</p>
                         <p className="text-xs text-slate-500 font-mono">{inc.pincode || "—"}</p>
                       </div>
-                      <div className="bg-amber-500/5 rounded-lg px-3 py-2 space-y-1 border border-amber-500/10">
-                        <p className="text-xs font-semibold text-amber-500/60 uppercase tracking-wider">In Database</p>
-                        <p className="text-xs text-slate-300 truncate">
+                      <div className="bg-amber-50 rounded-lg px-3 py-2 space-y-1 border border-amber-200">
+                        <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">In Database</p>
+                        <p className="text-xs text-slate-700 truncate">
                           {[ex.city, ex.district, ex.state].filter(Boolean).join(", ") || "—"}
                         </p>
                         <p className="text-xs text-slate-500 font-mono">{ex.pincode || "—"}</p>
@@ -244,9 +243,9 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
                 {/* Action selector */}
                 <div className="flex gap-2 px-4 pb-3">
                   {[
-                    { key: ACTION_SKIP,   label: "Skip",   activeClass: "bg-slate-700 text-white border-slate-600" },
-                    { key: ACTION_MERGE,  label: "Merge",  activeClass: "bg-emerald-600/20 text-emerald-300 border-emerald-500/40" },
-                    { key: ACTION_INSERT, label: "Insert", activeClass: "bg-indigo-600/20 text-indigo-300 border-indigo-500/40" },
+                    { key: ACTION_SKIP,   label: "Skip",   activeClass: "bg-slate-700 text-white border-slate-700" },
+                    { key: ACTION_MERGE,  label: "Merge",  activeClass: "bg-emerald-600 text-white border-emerald-600" },
+                    { key: ACTION_INSERT, label: "Insert", activeClass: "bg-indigo-600 text-white border-indigo-600" },
                   ].map(({ key, label, activeClass }) => (
                     <button
                       key={key}
@@ -255,7 +254,7 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
                       className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                         action === key
                           ? activeClass
-                          : "bg-transparent text-slate-600 border-slate-800 hover:border-slate-600 hover:text-slate-400"
+                          : "bg-white text-slate-500 border-slate-300 hover:border-slate-400 hover:text-slate-700"
                       }`}
                     >
                       {label}
@@ -268,12 +267,12 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
         </div>
 
         {/* ── Footer ─────────────────────────────────────────────────────── */}
-        <div className="px-6 py-4 border-t border-slate-800 shrink-0">
+        <div className="px-6 py-4 border-t border-slate-200 shrink-0">
           <div className="flex gap-3">
             <button
               onClick={onClose}
               disabled={loading}
-              className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800/60 border border-slate-700/50 hover:text-white transition-all disabled:opacity-40"
+              className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 hover:text-slate-900 transition-all disabled:opacity-40"
             >
               Cancel
             </button>
@@ -283,9 +282,9 @@ export default function DuplicateReviewModal({ isOpen, onClose, onDone, duplicat
               className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0 flex items-center justify-center gap-2"
               style={{
                 background: hasWork
-                  ? "linear-gradient(135deg,#6366f1,#10b981)"
-                  : "linear-gradient(135deg,#374151,#4b5563)",
-                boxShadow: hasWork ? "0 4px 15px rgba(99,102,241,0.2)" : "none",
+                  ? "linear-gradient(135deg,#4f46e5,#059669)"
+                  : "linear-gradient(135deg,#94a3b8,#64748b)",
+                boxShadow: hasWork ? "0 4px 15px rgba(79,70,229,0.25)" : "none",
               }}
             >
               {loading ? (

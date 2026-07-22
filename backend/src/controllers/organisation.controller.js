@@ -10,6 +10,8 @@ import {
 
 const BULK_LIMIT = 500;
 
+const VALID_MODES = ["Email", "Phone", "WhatsApp", "Visit"];
+
 const SORT_WHITELIST = new Set([
   "name", "email", "city", "district", "state",
   "status", "follow_up_date", "createdAt", "updatedAt",
@@ -363,4 +365,65 @@ export const cancelNextInteraction = asyncHandler(async (req, res) => {
   await org.save({ validateBeforeSave: false });
 
   return sendSuccess(res, 200, "Next interaction date cancelled successfully.");
+});
+
+// ── PATCH /organisations/:id/interactions/next ────────────────────────────────
+// RESCHEDULE — edits the SAME interaction entry's nextInteractionDate /
+// interactionMode / nextNotes in place. Does NOT push a new interaction entry,
+// so interactionCount (org.interactions.length) stays unchanged.
+//
+// NOTE: This controller was MISSING earlier — the frontend
+// (Notificationspage.jsx → handleRescheduleConfirm) was calling this exact
+// route, so the PATCH request had nowhere to land, and the "reschedule" never
+// actually persisted or reflected in the UI.
+export const rescheduleNextInteraction = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { interactionIndex, nextInteractionDate, interactionMode, nextNotes } = req.body;
+
+  if (interactionIndex === undefined || interactionIndex === null) {
+    return sendError(res, 422, "interactionIndex is required.");
+  }
+  if (!nextInteractionDate) {
+    return sendError(res, 422, "nextInteractionDate is required.");
+  }
+  if (!interactionMode || !VALID_MODES.includes(interactionMode)) {
+    return sendError(res, 422, `interactionMode must be one of: ${VALID_MODES.join(", ")}.`);
+  }
+
+  const parsedDate = new Date(nextInteractionDate);
+  if (isNaN(parsedDate.getTime())) {
+    return sendError(res, 422, "nextInteractionDate is not a valid date.");
+  }
+
+  const org = await Organisation.findById(id);
+  if (!org) return sendError(res, 404, "Organisation not found.");
+
+  // data_entry: ownership verify karo
+  if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id)) {
+    return sendError(res, 403, "You can only edit records you created.");
+  }
+
+  const entry = org.interactions[interactionIndex];
+  if (!entry) return sendError(res, 404, "Interaction entry not found.");
+
+  // Same entry ko in-place update karo — koi naya interaction push nahi hota
+  entry.nextInteractionDate = parsedDate;
+  entry.interactionMode     = interactionMode;
+  entry.nextNotes           = nextNotes && String(nextNotes).trim()
+    ? String(nextNotes).trim()
+    : undefined;
+
+  org.markModified("interactions");
+
+  try {
+    await org.save({ validateBeforeSave: false });
+  } catch (err) {
+    if (err.name === "ValidationError")
+      return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
+    throw err;
+  }
+
+  return sendSuccess(res, 200, "Interaction rescheduled successfully.", {
+    interaction: entry,
+  });
 });

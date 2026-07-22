@@ -26,7 +26,7 @@ import {
   getInteractions,
 } from "../controllers/unifiedOrganisation.controller.js";
 
-// ── Volunteer controller ───────────────────────────────────────────────────────
+// ── Volunteer + Notification controller ───────────────────────────────────────
 import {
   createVolunteer,
   bulkCreateVolunteers,
@@ -36,6 +36,7 @@ import {
   deleteVolunteer,
   getUpcomingInteractions,
   cancelNextInteraction,
+  rescheduleNextInteraction, // ← FIX: was never imported, so the route below never existed
 } from "../controllers/organisation.controller.js";
 
 const router = express.Router();
@@ -186,6 +187,18 @@ router.post(
   applyDataScope,
   checkActionAccess("edit"),
   cancelNextInteraction,
+);
+
+// ── FIX: this route was completely missing. Notificationspage.jsx's
+// "Reschedule" button was calling PATCH /:id/interactions/next, but since it
+// was never registered here, Express had no handler for it (404), so the
+// reschedule silently failed and never persisted or reflected anywhere.
+router.patch(
+  "/:id/interactions/next",
+  checkModuleAccess("organisation"),
+  applyDataScope,
+  checkActionAccess("edit"),
+  rescheduleNextInteraction,
 );
 
 router.post(
