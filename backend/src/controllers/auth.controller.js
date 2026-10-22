@@ -219,7 +219,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   try {
     await sendEmail({
       to: user.email,
-      subject: "Password Reset Request — AuthApp",
+      subject: "Password Reset Request — DB Manager",
       html: forgotPasswordTemplate({
         name: user.fullName,
         resetURL,
@@ -289,7 +289,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
   // Send confirmation email
   sendEmail({
     to: user.email,
-    subject: "Your password has been changed — AuthApp",
+    subject: "Your password has been changed — DB Manager",
     html: passwordChangedTemplate({ name: user.fullName }),
   }).catch((err) => console.error("Password changed email failed:", err.message));
 

@@ -22,8 +22,8 @@ const Ico = {
 const M = {
   login: ({ a }) => (
     <div style={{ background: "linear-gradient(155deg,#0f172a,#1e3a5f)", borderRadius: 12, padding: 18 }}>
-      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", color: "rgba(255,255,255,.35)", textTransform: "uppercase", marginBottom: 14 }}>DataVault · Secure Login</div>
-      {[["Email","admin@datavault.in"],["Password","••••••••••"]].map(([l,v]) => (
+      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".14em", color: "rgba(255,255,255,.35)", textTransform: "uppercase", marginBottom: 14 }}>DB Manager · Secure Login</div>
+      {[["Email","admin@dbmanager.in"],["Password","••••••••••"]].map(([l,v]) => (
         <div key={l} style={{ marginBottom: 9 }}>
           <div style={{ fontSize: 9, color: "rgba(255,255,255,.35)", marginBottom: 3, fontWeight: 600 }}>{l}</div>
           <div style={{ background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.11)", borderRadius: 7, padding: "7px 11px", fontSize: 11, color: "rgba(255,255,255,.55)" }}>{v}</div>
@@ -44,7 +44,7 @@ const M = {
         {[0,1,2].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 99, background: i===0 ? a : "rgba(255,255,255,.12)" }} />)}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginBottom: 7 }}>
-        {[["Full Name","Rajesh Kumar"],["Organization","DataVault Corp"]].map(([l,v]) => (
+        {[["Full Name","Rajesh Kumar"],["Organization","DB Manager"]].map(([l,v]) => (
           <div key={l}>
             <div style={{ fontSize: 8.5, color: "rgba(255,255,255,.35)", marginBottom: 3, fontWeight: 600 }}>{l}</div>
             <div style={{ background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 6, padding: "5px 7px", fontSize: 10, color: "rgba(255,255,255,.7)" }}>{v}</div>
@@ -245,7 +245,7 @@ export default function HowItWorksSection() {
             How It Works
           </h2>
           <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.75, maxWidth: 460, margin: "0 auto" }}>
-            Get started with DataVault in minutes — manage your institution's data securely and efficiently.
+            Get started with DB Manager in minutes — manage your institution's data securely and efficiently.
           </p>
         </div>
 

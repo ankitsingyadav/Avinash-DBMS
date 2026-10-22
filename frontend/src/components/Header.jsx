@@ -172,7 +172,7 @@ export default function Header() {
 
   return (
     <>
-      <meta name="description" content="DataVault — Enterprise database management for colleges, NGOs, volunteer programs, and schools. Secure, scalable, audit-ready." />
+      <meta name="description" content="DB Manager — Enterprise database management for colleges, NGOs, volunteer programs, and schools. Secure, scalable, audit-ready." />
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
@@ -241,7 +241,7 @@ export default function Header() {
 
       <header
         role="banner"
-        aria-label="DataVault — Database Management Platform"
+        aria-label="DB Manager — Database Management Platform"
         className="relative w-full overflow-hidden"
         style={{ height: "50vh", minHeight: "340px", maxHeight: "460px", fontFamily: "'Sora', sans-serif" }}
         onMouseEnter={() => setPaused(true)}

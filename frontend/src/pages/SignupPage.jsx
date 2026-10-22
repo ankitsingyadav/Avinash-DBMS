@@ -106,7 +106,7 @@ export default function SignupPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0f172a" }}>Create your account</h1>
-          <p className="text-sm mt-1.5" style={{ color: "#64748b" }}>Join thousands of users on AuthApp</p>
+          <p className="text-sm mt-1.5" style={{ color: "#64748b" }}>Join thousands of users on DB Manager</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

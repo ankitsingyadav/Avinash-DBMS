@@ -134,7 +134,7 @@ export default function LoginPage() {
             Welcome back
           </h1>
           <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 1.75rem" }}>
-            Sign in to continue to AuthApp
+            Sign in to continue to DB Manager
           </p>
         </div>
 

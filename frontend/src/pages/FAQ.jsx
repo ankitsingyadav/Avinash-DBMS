@@ -316,7 +316,7 @@ const FAQ = () => {
         }
       `}</style>
 
-      <section className="faq-section">
+      <section id="faqs" className="faq-section">
         <div className="faq-glow faq-glow--tl" aria-hidden="true" />
         <div className="faq-glow faq-glow--br" aria-hidden="true" />
 
