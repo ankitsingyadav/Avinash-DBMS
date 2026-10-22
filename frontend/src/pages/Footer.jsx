@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import {
   FaTwitter,
   FaFacebookF,
-  FaLinkedinIn,
-  FaYoutube,
+  FaInstagram,
+  FaGithub,
   FaArrowUp,
 } from "react-icons/fa";
 
@@ -123,20 +123,20 @@ const socials = [
     border: "rgba(24,119,242,0.3)",
   },
   {
-    icon: FaLinkedinIn,
+    icon: FaInstagram,
     href: "#",
-    label: "LinkedIn",
-    color: "#0a66c2",
-    bg: "rgba(10,102,194,0.15)",
-    border: "rgba(10,102,194,0.3)",
+    label: "Instagram",
+    color: "#e4405f",
+    bg: "rgba(228,64,95,0.15)",
+    border: "rgba(228,64,95,0.3)",
   },
   {
-    icon: FaYoutube,
-    href: "#",
-    label: "YouTube",
-    color: "#ff0000",
-    bg: "rgba(255,0,0,0.12)",
-    border: "rgba(255,0,0,0.3)",
+    icon: FaGithub,
+    href: "https://github.com/Simtrak1234/Avinash-DBMS",
+    label: "GitHub",
+    color: "#f0f6fc",
+    bg: "rgba(240,246,252,0.12)",
+    border: "rgba(240,246,252,0.3)",
   },
 ];
 
